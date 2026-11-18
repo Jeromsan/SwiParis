@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.uv-cache/
+.python/
+data/raw/**
+!data/raw/foursquare/
+!data/raw/foursquare/.gitkeep
+data/processed/
+outputs/
+*.sqlite*
+build/
+dist/
