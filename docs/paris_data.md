@@ -66,7 +66,7 @@ civiles : ici `[2026-11-18T11:30:00Z, 2026-12-18T11:30:00Z)`.
   confirmés sur les annonces pour une démonstration en conditions réelles.
 - Catégories : les valeurs réelles de `qfap_tags` sont séparées par `;` puis
   conservées dans `event_tags`. La table de correspondance versionnée
-  `config/paris_data_categories.json` produit des catégories d'activité. Les
+  `config/common_taxonomy.json` produit les catégories communes d'activité. Les
   tags thématiques (par exemple Enfants) ne sont pas transformés arbitrairement
   en type d'activité ; faute de correspondance, la catégorie vaut `autre`.
 - Prix : `gratuit` -> `free`, `payant` -> `paid`, `gratuit sous condition` ->
@@ -137,6 +137,13 @@ version, copie figée, reproductibilité et changement de version avec le mappin
 Le catalogue réel est également vérifié : intégrité SQLite, clés étrangères,
 aucune séance hors fenêtre, aucune activité sans lieu/séance, géographie conforme,
 absence de balises HTML résiduelles, concordance SQLite/JSONL/rapport et empreinte
-de la copie brute identique à l'original. Le README reste une présentation courte
-du projet ; les instructions de collecte sont dans ce document.
+de la copie brute identique à l'original. Le README présente le projet et le
+lancement de la démo ; les instructions de collecte sont dans ce document.
 La génération des paires et le modèle attendent les consignes suivantes.
+
+Depuis la taxonomie commune v1, l'import utilise par défaut
+`config/common_taxonomy.json` (section `paris_data`). Les anciens mappings plats
+restent acceptés via `--category-map`. Le snapshot historique décrit ci-dessus
+conserve son mapping et ses empreintes dans le manifeste. Pour l'équipe, utiliser
+`common.sqlite` : ses catégories sont recalculées à partir des tags source, sans
+modifier le snapshot historique. Voir [le guide commun](team_handoff.md).

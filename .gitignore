@@ -9,7 +9,12 @@ data/raw/**
 !data/raw/foursquare/
 !data/raw/foursquare/.gitkeep
 data/processed/
+data/pilot/
 outputs/
+.env
+.env.*
+!.env.example
+.venv-*/
 *.sqlite*
 build/
 dist/

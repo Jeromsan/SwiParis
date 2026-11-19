@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==69.2.0", "wheel==0.43.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiparis"
-version = "0.1.0"
+version = "0.2.0"
 description = "Collecte reproductible Foursquare et Paris Data vers SQLite"
 requires-python = ">=3.10"
 dependencies = []
@@ -12,9 +12,12 @@ dependencies = []
 [project.scripts]
 swiparis-import = "swiparis.import_foursquare:main"
 swiparis-paris-import = "swiparis.import_paris_data:main"
+swiparis-prepare = "swiparis.prepare_data:main"
+swiparis-demo = "swiparis.demo:main"
+swiparis-bundle = "swiparis.bundle:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-swiparis = ["*.sql"]
+swiparis = ["*.sql", "web/*"]

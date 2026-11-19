@@ -294,6 +294,9 @@ def run(args):
         raise ValueError("Export schema does not match the inspected Paris Data format")
     mapping_bytes = args.category_map.read_bytes()
     category_map = json.loads(mapping_bytes.decode("utf-8-sig"))
+    if isinstance(category_map, dict) and "version" in category_map:
+        from .taxonomy import load_taxonomy
+        category_map = load_taxonomy(args.category_map)["paris_data"]
     if not isinstance(category_map, dict) or not all(isinstance(k, str) and isinstance(v, str) and k and v for k, v in category_map.items()):
         raise ValueError("Expected source tag -> normalized category JSON mapping")
     events, rejected, stages, issues, location_issues, tags = prepare(rows, category_map, as_of, end)
@@ -372,7 +375,7 @@ def main():
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--report", required=True, type=Path)
-    parser.add_argument("--category-map", type=Path, default=Path("config/paris_data_categories.json"))
+    parser.add_argument("--category-map", type=Path, default=Path("config/common_taxonomy.json"))
     parser.add_argument("--as-of", help="Snapshot instant with explicit timezone; default: current UTC")
     parser.add_argument("--days", type=int, default=30)
     args = parser.parse_args()
