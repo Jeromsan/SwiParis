@@ -1,0 +1,42 @@
+{
+  "random": {
+    "train": {
+      "pairs": 19308,
+      "pairwise_accuracy": 0.4965299357779159
+    },
+    "val": {
+      "pairs": 6064,
+      "pairwise_accuracy": 0.4859828496042216
+    },
+    "test": {
+      "pairs": 6322,
+      "pairwise_accuracy": 0.48070230939576086
+    },
+    "val_by_negative_type": {
+      "weak_cat": 0.49149214659685864,
+      "weak_geo": 0.4847982310668878,
+      "weak_pop": 0.4912162162162162,
+      "weak_time": 0.4747393744987971
+    }
+  },
+  "popularity": {
+    "train": {
+      "pairs": 19308,
+      "pairwise_accuracy": 0.6990884607416615
+    },
+    "val": {
+      "pairs": 6064,
+      "pairwise_accuracy": 0.5588720316622692
+    },
+    "test": {
+      "pairs": 6322,
+      "pairwise_accuracy": 0.5397026257513445
+    },
+    "val_by_negative_type": {
+      "weak_cat": 0.5206151832460733,
+      "weak_geo": 0.5696517412935324,
+      "weak_pop": 0.5408783783783784,
+      "weak_time": 0.611467522052927
+    }
+  }
+}

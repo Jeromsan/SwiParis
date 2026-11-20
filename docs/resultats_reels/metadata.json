@@ -1,0 +1,49 @@
+{
+  "version": "v20261120-093140-4cf12e68",
+  "created_utc": "2026-11-20T09:31:40Z",
+  "git_commit": null,
+  "config": {
+    "dim": 32,
+    "lr": 0.02,
+    "l2": 0.0001,
+    "epochs": 100,
+    "batch_size": 1024,
+    "patience": 8,
+    "seed": 42
+  },
+  "metrics": {
+    "best_epoch": 8,
+    "val_loss": 0.6714323163032532,
+    "val_accuracy": 0.5750330090522766,
+    "baseline_popularity_val_accuracy": 0.5588720316622692,
+    "baseline_random_val_accuracy": 0.5,
+    "epochs_run": 16
+  },
+  "feature_dim": 11,
+  "categories": [
+    "autre",
+    "culture",
+    "loisirs",
+    "nature",
+    "restauration",
+    "spectacle",
+    "sport",
+    "vie_nocturne",
+    "visite"
+  ],
+  "inputs": {
+    "pairs_sha256": "968972c79d9a495e6117bb6010ac949cfab1e938a3ad55f610639132f715cc0b",
+    "features_sha256": null,
+    "pairs_by_split": {
+      "train": 19308,
+      "test": 6322,
+      "val": 6064
+    }
+  },
+  "libraries": {
+    "torch": "2.15.0+cu132",
+    "numpy": "2.5.4",
+    "pandas": "3.0.6"
+  },
+  "note": "global prior only; session personalisation is applied on top of w0 by the scoring module"
+}
