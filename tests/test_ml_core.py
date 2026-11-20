@@ -7,13 +7,18 @@ import sqlite3
 import tempfile
 import unittest
 
-import numpy as np
+try:
+    import numpy as np
+except ImportError:  # dépendance optionnelle du cœur ML
+    raise unittest.SkipTest('numpy absent : installer avec pip install -e ".[ml]"')
 
-from swiparis.ml.catalog import foursquare_items, paris_data_items
 from swiparis.ml.features import FeatureSpace, Item, foursquare_local_hour, source_local_hour, time_profile
+from swiparis.ml.items import common_categories, common_items, encode_common
 from swiparis.ml.model import SessionProfile
 from swiparis.ml.selection import (acquisition_matrix, binary_entropy, intra_list_diversity,
-                                   mmr_rerank, next_pair, rank)
+                                   mmr_rerank, next_pair, rank, session_finished)
+
+REAL_DB = Path(__file__).resolve().parents[1] / "data" / "processed" / "common.sqlite"
 
 CATEGORIES = ("culture", "spectacle", "nature", "sport", "nightlife")
 SPACE = FeatureSpace(CATEGORIES, grid=(2, 2))
@@ -123,6 +128,16 @@ class ModelTest(unittest.TestCase):
             np.testing.assert_allclose(copy.scores(PHI), profile.scores(PHI))
             self.assertEqual(copy.n_updates, 1)
 
+    def test_log_answers(self):
+        profile = SessionProfile(np.zeros(SPACE.dim))
+        self.assertIsNone(profile.answer(phi_of("parc"), phi_of("bar"), "skip"))
+        self.assertEqual(profile.n_updates, 0)
+        self.assertFalse(profile.w.any())
+        profile.answer(phi_of("bar"), phi_of("parc"), "right")  # parc était à droite et a été choisi
+        self.assertGreater(profile.prob(phi_of("parc"), phi_of("bar")), .5)
+        with self.assertRaises(ValueError):
+            profile.answer(phi_of("parc"), phi_of("bar"), "both")
+
     def test_invalid_parameters(self):
         with self.assertRaises(ValueError):
             SessionProfile(np.zeros(3), lam=1)
@@ -178,6 +193,19 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(len(mmr_rerank(scores, phi, k=10)), 4)
         self.assertEqual(mmr_rerank(scores, phi, k=0), [])
 
+    def test_session_stops_after_5_answers_or_8_offers(self):
+        self.assertFalse(session_finished(4, 7))
+        self.assertTrue(session_finished(5, 5))
+        self.assertTrue(session_finished(2, 8))
+
+    def test_rank_excludes_offered_items(self):
+        profile = SessionProfile(np.zeros(SPACE.dim))
+        profile.update(phi_of("parc"), phi_of("bar"))
+        result = [item_id for item_id, _ in rank(profile, PHI, IDS, k=10, exclude={"parc", "bar"})]
+        self.assertEqual(len(result), len(IDS) - 2)
+        self.assertFalse({"parc", "bar"} & set(result))
+        self.assertEqual(rank(profile, PHI, IDS, exclude=IDS), [])
+
     def test_rank_returns_ids_and_scores(self):
         profile = SessionProfile(np.zeros(SPACE.dim))
         profile.update(phi_of("parc"), phi_of("bar"))
@@ -187,62 +215,77 @@ class SelectionTest(unittest.TestCase):
         self.assertAlmostEqual(result[0][1], float(profile.scores(phi_of("parc"))))
 
 
-class CatalogTest(unittest.TestCase):
-    def test_foursquare_time_profile_uses_only_given_users(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "foursquare.sqlite"
-            with closing(sqlite3.connect(path)) as db:
-                db.executescript("""
-                    CREATE TABLE venues(venue_id TEXT PRIMARY KEY, category TEXT NOT NULL,
-                        latitude REAL NOT NULL, longitude REAL NOT NULL, country TEXT NOT NULL);
-                    CREATE TABLE checkins(user_id TEXT NOT NULL, venue_id TEXT NOT NULL REFERENCES venues(venue_id),
-                        utc_time TEXT NOT NULL, timezone_offset INTEGER NOT NULL,
-                        PRIMARY KEY(user_id,utc_time,venue_id)) WITHOUT ROWID;
-                    INSERT INTO venues VALUES ('v1','Museum',48.86,2.33,'FR'), ('v2','Bar',48.87,2.36,'FR');
-                    INSERT INTO checkins VALUES ('train','v1','2012-04-03T10:00:00Z',120),
-                                                ('test','v1','2012-04-03T22:00:00Z',120);
-                """)
-                db.commit()
-            mapping = {"Museum": "culture", "Bar": ["nightlife"]}
-            items = {item.item_id: item for item in foursquare_items(path, mapping, users={"train"})}
-            self.assertEqual(items["v1"].time_profile, (0, 0, 1, 0))
-            self.assertIsNone(items["v2"].time_profile)
-            self.assertEqual(items["v2"].categories, ("nightlife",))
-            self.assertEqual(items["v1"].price_type, "unknown")
-            everyone = {item.item_id: item for item in foursquare_items(path, mapping, users=None)}
-            self.assertEqual(everyone["v1"].time_profile, (.5, 0, .5, 0))
-            with self.assertRaises(ValueError):
-                foursquare_items(path, {"Museum": "culture"}, users=None)
+class CommonItemsTest(unittest.TestCase):
+    def fixture(self, root):
+        path = root / "common.sqlite"
+        schema = files("swiparis").joinpath("common_schema.sql").read_text(encoding="utf-8")
+        with closing(sqlite3.connect(path)) as db:
+            db.executescript(schema)
+            db.executemany("INSERT INTO categories VALUES (?,?)",
+                           [("restauration", "R"), ("culture", "C"), ("autre", "A")])
+            for item_id, source, price in (("foursquare:v1", "foursquare", "unknown"),
+                                           ("foursquare:v2", "foursquare", "unknown"),
+                                           ("paris_data:e1", "paris_data", "free")):
+                db.execute("INSERT INTO items(item_id,source,source_id,title,description,lead_text,price_type,"
+                           "price_detail,cover_credit,date_description,audience,quality_flags_json) "
+                           "VALUES (?,?,?,'t','','',?,'','','','','[]')", (item_id, source, item_id.split(":")[1], price))
+            db.executemany("INSERT INTO item_categories VALUES (?,?)", [
+                ("foursquare:v1", "culture"), ("foursquare:v2", "restauration"),
+                ("paris_data:e1", "culture"), ("paris_data:e1", "autre")])
+            db.executemany("INSERT INTO locations(item_id,location_index,latitude,longitude) VALUES (?,?,?,?)", [
+                ("foursquare:v1", 0, 48.86, 2.33), ("foursquare:v2", 0, 48.87, 2.36),
+                ("paris_data:e1", 1, 48.88, 2.30), ("paris_data:e1", 0, 48.85, 2.35)])
+            db.execute("INSERT INTO occurrences VALUES ('paris_data:e1','2026-11-20T18:30:00Z',"
+                       "'2026-11-20T20:00:00Z','2026-11-20T19:30:00+01:00','x')")
+            db.executemany("INSERT INTO visits VALUES (?,?,?,?,?)", [
+                ("foursquare:train", "train", "foursquare:v1", "2012-04-03T10:00:00Z", 120),
+                ("foursquare:test", "test", "foursquare:v1", "2012-04-03T22:00:00Z", 120)])
+            db.commit()
+        return path
 
-    def test_paris_data_items(self):
+    def test_items_and_leakage_control(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "paris.sqlite"
-            schema = files("swiparis").joinpath("paris_data_schema.sql").read_text(encoding="utf-8")
-            with closing(sqlite3.connect(path)) as db:
-                db.executescript(schema)
-                db.execute("INSERT INTO snapshots VALUES ('s','1','u','h','a','b','{}')")
-                for event_id, price in (("e1", "free"), ("e2", "paid")):
-                    db.execute("INSERT INTO events VALUES (?,'s',?,NULL,'u','t','','',?,NULL,NULL,'','',"
-                               "NULL,NULL,'occurrences',NULL,NULL,'',NULL,'','','[]')", (event_id, event_id, price))
-                db.executemany("INSERT INTO event_locations VALUES (?,?,?,?,?,?,?,?,?)", [
-                    ("e1", 1, "B", "", "75011", "Paris", 11, 48.86, 2.38),
-                    ("e1", 0, "A", "", "75004", "Paris", 4, 48.85, 2.35)])
-                db.executemany("INSERT INTO event_occurrences VALUES (?,?,?,?,?)", [
-                    ("e1", "2026-11-20T18:30:00Z", "2026-11-20T20:00:00Z", "2026-11-20T19:30:00+01:00", "x"),
-                    ("e1", "2026-11-21T09:00:00Z", "2026-11-21T11:00:00Z", "2026-11-21T10:00:00+01:00", "x")])
-                db.executemany("INSERT INTO event_categories VALUES (?,?)",
-                               [("e1", "exposition"), ("e1", "visite"), ("e2", "musique")])
-                db.commit()
-            mapping = {"exposition": "culture", "visite": "culture", "musique": "spectacle"}
-            items = {item.item_id: item for item in paris_data_items(path, mapping)}
-            self.assertEqual(items["e1"].categories, ("culture",))
-            self.assertEqual((items["e1"].latitude, items["e1"].longitude), (48.85, 2.35))
-            self.assertEqual(items["e1"].time_profile, (0, .5, 0, .5))
-            self.assertEqual(items["e2"].price_type, "paid")
-            self.assertIsNone(items["e2"].latitude)
-            SPACE.encode_many(list(items.values()))
+            path = self.fixture(Path(tmp))
+            self.assertEqual(common_categories(path), ("autre", "culture", "restauration"))
+            items = {item.item_id: item for item in common_items(path, users={"foursquare:train"})}
+            self.assertEqual(sorted(items), ["foursquare:v1", "foursquare:v2", "paris_data:e1"])
+            self.assertEqual(items["foursquare:v1"].time_profile, (0, 0, 1, 0))  # visite de test ignorée
+            self.assertIsNone(items["foursquare:v2"].time_profile)
+            self.assertEqual(items["paris_data:e1"].categories, ("autre", "culture"))
+            self.assertEqual((items["paris_data:e1"].latitude, items["paris_data:e1"].longitude), (48.85, 2.35))
+            self.assertEqual(items["paris_data:e1"].time_profile, (0, 0, 0, 1))
+            everyone = {item.item_id: item for item in common_items(path, users=None)}
+            self.assertEqual(everyone["foursquare:v1"].time_profile, (.5, 0, .5, 0))
+            demo = common_items(path, users=None, sources=["paris_data"])
+            self.assertEqual([item.item_id for item in demo], ["paris_data:e1"])
             with self.assertRaises(ValueError):
-                paris_data_items(path, {"exposition": "culture"})
+                common_items(path, users=None, sources=["yelp"])
+
+    def test_encoded_items(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            encoded = encode_common(self.fixture(Path(tmp)), users=None)
+            self.assertEqual(encoded.phi.shape, (3, encoded.space.dim))
+            rows = encoded.rows(["paris_data:e1", "foursquare:v1"])
+            np.testing.assert_allclose(rows[0], encoded.vector("paris_data:e1"))
+            self.assertEqual(encoded.rows([]).shape, (0, encoded.space.dim))
+            with self.assertRaises(KeyError):
+                encoded.rows(["foursquare:inconnu"])
+
+    @unittest.skipUnless(REAL_DB.exists(), "data/processed/common.sqlite absent (partagé hors Git)")
+    def test_real_common_database(self):
+        encoded = encode_common(REAL_DB, users=None)
+        self.assertEqual(len(encoded.space.categories), 10)
+        self.assertTrue(np.isfinite(encoded.phi).all())
+        demo = encode_common(REAL_DB, users=None, sources=["paris_data"])
+        price = demo.space.blocks["price"]
+        self.assertFalse(demo.phi[:, price][:, -1].any())  # aucune annonce Paris Data au prix "unknown"
+        profile = SessionProfile(np.zeros(demo.space.dim))
+        first = next_pair(profile, demo.phi, demo.ids, rng=0)
+        self.assertIsNotNone(first)
+        profile.update(demo.vector(first[0]), demo.vector(first[1]))
+        top = rank(profile, demo.phi, demo.ids, exclude=first)
+        self.assertEqual(len(top), 10)
+        self.assertFalse(set(first) & {item_id for item_id, _ in top})
 
 
 if __name__ == "__main__":
