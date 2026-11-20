@@ -11,7 +11,10 @@ Blocs, dans cet ordre :
   time   part des visites ou séances par tranche horaire locale
          (nuit 0-6 h, matin 6-12 h, après-midi 12-18 h, soirée 18-24 h) ;
   zone   cellule d'une grille posée sur le rectangle Paris des imports, one-hot ;
-  text   embedding texte optionnel (normalisé L2), absent par défaut.
+  text   embedding texte optionnel (normalisé L2), absent par défaut ;
+  pop    popularité optionnelle : log(1 + visites) / log(1 + maximum), calculée
+         sur les visites d'entraînement. Les annonces Paris Data n'ont pas de
+         visites : leur popularité est inconnue et vaut 0 dans ce bloc.
 Une information manquante donne un bloc nul.
 """
 from __future__ import annotations
@@ -39,6 +42,7 @@ class Item:
     longitude: float | None = None
     time_profile: tuple[float, ...] | None = None
     text_embedding: tuple[float, ...] | None = None
+    popularity: float | None = None
 
 
 def time_bucket(hour: int) -> int:
@@ -71,7 +75,8 @@ class FeatureSpace:
     """Encodeur φ : Item -> vecteur numpy de taille `dim`."""
 
     def __init__(self, categories: Sequence[str], grid: tuple[int, int] = (3, 3),
-                 bbox: tuple[float, float, float, float] = PARIS_BBOX, text_dim: int = 0):
+                 bbox: tuple[float, float, float, float] = PARIS_BBOX, text_dim: int = 0,
+                 popularity: bool = False):
         categories = tuple(categories)
         if not categories or len(set(categories)) != len(categories):
             raise ValueError("Categories must be non-empty and unique")
@@ -85,9 +90,10 @@ class FeatureSpace:
         self.grid = (rows, cols)
         self.bbox = bbox
         self.text_dim = text_dim
+        self.popularity = popularity
         self._category_index = {name: i for i, name in enumerate(categories)}
         sizes = {"cat": len(categories), "price": len(PRICE_TYPES), "time": len(TIME_BUCKETS),
-                 "zone": rows * cols, "text": text_dim}
+                 "zone": rows * cols, "text": text_dim, "pop": int(popularity)}
         self.blocks: dict[str, slice] = {}
         start = 0
         for name, size in sizes.items():
@@ -102,7 +108,8 @@ class FeatureSpace:
                 + [f"price:{p}" for p in PRICE_TYPES]
                 + [f"time:{t}" for t in TIME_BUCKETS]
                 + [f"zone:{r}-{c}" for r in range(rows) for c in range(cols)]
-                + [f"text:{k}" for k in range(self.text_dim)])
+                + [f"text:{k}" for k in range(self.text_dim)]
+                + (["pop:log_visits"] if self.popularity else []))
 
     def zone(self, latitude: float | None, longitude: float | None) -> int | None:
         """Indice de cellule (ligne 0 = nord, colonne 0 = ouest), None sans coordonnées."""
@@ -143,6 +150,10 @@ class FeatureSpace:
             norm = np.linalg.norm(vector)
             if norm > 0:
                 x[self.blocks["text"]] = vector / norm
+        if self.popularity and item.popularity is not None:
+            if not 0 <= item.popularity <= 1:
+                raise ValueError(f"{item.item_id}: popularity must be in [0, 1]")
+            x[self.blocks["pop"].start] = item.popularity
         return x
 
     def encode_many(self, items: Sequence[Item]) -> np.ndarray:

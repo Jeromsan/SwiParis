@@ -7,7 +7,8 @@ seule table `items`. Les identifiants sont préfixés par leur source
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
+import math
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,15 +34,40 @@ def common_categories(db_path) -> tuple[str, ...]:
         return tuple(sorted(row[0] for row in db.execute("SELECT category FROM categories")))
 
 
+def visit_counts(db_path, users: Collection[str]) -> Counter:
+    """Nombre de visites par lieu, sur les visites de `users` seulement."""
+    allowed = set(users)
+    with closing(_connect(db_path)) as db:
+        return Counter(item_id for user_id, item_id in db.execute("SELECT user_id, item_id FROM visits")
+                       if user_id in allowed)
+
+
+def load_histories(db_path, users: Collection[str]) -> dict[str, list[tuple[str, str]]]:
+    """{user_id: [(utc_time, item_id), ...]} triées dans le temps, pour `users` seulement."""
+    allowed, histories = set(users), defaultdict(list)
+    with closing(_connect(db_path)) as db:
+        for user_id, item_id, utc_time in db.execute(
+                "SELECT user_id, item_id, utc_time FROM visits ORDER BY user_id, utc_time, item_id"):
+            if user_id in allowed:
+                histories[user_id].append((utc_time, item_id))
+    return histories
+
+
+def popularity_value(count: int, maximum: int) -> float:
+    """log(1 + visites) / log(1 + maximum), dans [0, 1]."""
+    return math.log1p(count) / math.log1p(maximum) if maximum > 0 else 0.0
+
+
 def common_items(db_path, *, users: Collection[str] | None,
-                 sources: Sequence[str] = SOURCES) -> list[Item]:
+                 sources: Sequence[str] = SOURCES, counts: Counter | None = None) -> list[Item]:
     """Activités de la base commune, triées par identifiant.
 
     Position : première adresse. Moment de la journée : séances pour Paris Data,
     visites pour Foursquare. Pour Foursquare, seules les visites de `users`
     comptent : passer les utilisateurs d'entraînement pour qu'aucune visite de
     validation ou de test n'entre dans les features. `users=None` prend toutes
-    les visites (démo seulement).
+    les visites (démo seulement). `counts` (voir `visit_counts`) remplit la
+    popularité des lieux Foursquare ; elle reste inconnue sinon.
     """
     sources = tuple(sources)
     if not sources or set(sources) - set(SOURCES):
@@ -67,8 +93,11 @@ def common_items(db_path, *, users: Collection[str] | None,
                     "SELECT user_id, item_id, utc_time, timezone_offset FROM visits"):
                 if allowed is None or user_id in allowed:
                     hours[item_id].append(foursquare_local_hour(utc_time, offset))
+    maximum = max(counts.values(), default=0) if counts is not None else 0
     return [Item(item_id, tuple(categories[item_id]), price_type, *locations.get(item_id, (None, None)),
-                 time_profile(hours[item_id]))
+                 time_profile(hours[item_id]),
+                 popularity=(popularity_value(counts.get(item_id, 0), maximum)
+                             if counts is not None and item_id.startswith("foursquare:") else None))
             for item_id, price_type in rows]
 
 
@@ -79,6 +108,7 @@ class EncodedItems:
     space: FeatureSpace
     ids: list[str]
     phi: np.ndarray
+    counts: Counter | None = None  # visites par lieu ayant servi au bloc popularité
     _row: dict[str, int] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -98,8 +128,13 @@ class EncodedItems:
 
 
 def encode_common(db_path, *, users: Collection[str] | None, sources: Sequence[str] = SOURCES,
-                  grid: tuple[int, int] = (3, 3)) -> EncodedItems:
-    """Charge et encode les activités ; à faire une fois au démarrage du service."""
-    space = FeatureSpace(common_categories(db_path), grid=grid)
-    items = common_items(db_path, users=users, sources=sources)
-    return EncodedItems(space, [item.item_id for item in items], space.encode_many(items))
+                  grid: tuple[int, int] = (3, 3), popularity_users: Collection[str] | None = None) -> EncodedItems:
+    """Charge et encode les activités ; à faire une fois au démarrage du service.
+
+    `popularity_users` ajoute le bloc popularité, calculé sur leurs visites
+    (les utilisateurs d'entraînement). Il est nécessaire avec le prior w₀ appris.
+    """
+    counts = visit_counts(db_path, popularity_users) if popularity_users is not None else None
+    space = FeatureSpace(common_categories(db_path), grid=grid, popularity=counts is not None)
+    items = common_items(db_path, users=users, sources=sources, counts=counts)
+    return EncodedItems(space, [item.item_id for item in items], space.encode_many(items), counts)

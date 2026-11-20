@@ -1,0 +1,255 @@
+{
+  "summary": {
+    "split": "test",
+    "users": 163,
+    "evaluated_users": 162,
+    "candidates": 6554,
+    "session": {
+      "eta": 0.05
+    },
+    "summary": {
+      "active": {
+        "ndcg": {
+          "mean": 0.08614550747404938,
+          "ci95_low": 0.06744221558004881,
+          "ci95_high": 0.10777903484815679
+        },
+        "recall": {
+          "mean": 0.07694209933418684,
+          "ci95_low": 0.06294163051823641,
+          "ci95_high": 0.09215280216171866
+        },
+        "auc": {
+          "mean": 0.6615692321460073,
+          "ci95_low": 0.6429172164297703,
+          "ci95_high": 0.679868038082219
+        },
+        "top10_diversity": 0.23331316393017473,
+        "top10_popularity_percentile": 0.9986490025301767,
+        "catalog_coverage_top10": 0.0033567287152883735
+      },
+      "uniform": {
+        "ndcg": {
+          "mean": 0.08790981640720268,
+          "ci95_low": 0.06656301549630524,
+          "ci95_high": 0.11026493055420294
+        },
+        "recall": {
+          "mean": 0.08303196081797294,
+          "ci95_low": 0.06862472747277443,
+          "ci95_high": 0.09806482817290532
+        },
+        "auc": {
+          "mean": 0.6600347936484012,
+          "ci95_low": 0.6405631903218922,
+          "ci95_high": 0.6789095854441797
+        },
+        "top10_diversity": 0.24104467329848603,
+        "top10_popularity_percentile": 0.9986994930227039,
+        "catalog_coverage_top10": 0.003051571559353067
+      },
+      "prior_only": {
+        "ndcg": {
+          "mean": 0.08344476391951082,
+          "ci95_low": 0.06573718505985161,
+          "ci95_high": 0.10459241853954301
+        },
+        "recall": {
+          "mean": 0.08296927149754003,
+          "ci95_low": 0.0666612699566305,
+          "ci95_high": 0.09939974662591182
+        },
+        "auc": {
+          "mean": 0.6550107078664371,
+          "ci95_low": 0.6348788056119863,
+          "ci95_high": 0.6744005432852018
+        },
+        "top10_diversity": 0.2524635921446938,
+        "top10_popularity_percentile": 0.9988808254818736,
+        "catalog_coverage_top10": 0.0021361000915471468
+      },
+      "popularity": {
+        "ndcg": {
+          "mean": 0.06708939796713927,
+          "ci95_low": 0.05043062777791352,
+          "ci95_high": 0.0839189595529837
+        },
+        "recall": {
+          "mean": 0.08075212646312117,
+          "ci95_low": 0.06609095239056056,
+          "ci95_high": 0.09671618507600784
+        },
+        "auc": {
+          "mean": 0.6542963801913784,
+          "ci95_low": 0.6309425669418397,
+          "ci95_high": 0.6781640980797292
+        },
+        "top10_diversity": 0.3733762223411358,
+        "top10_popularity_percentile": 0.9992854088128518,
+        "catalog_coverage_top10": 0.0019835215135794934
+      },
+      "random": {
+        "ndcg": {
+          "mean": 0.003314259700216575,
+          "ci95_low": 0.000585113360305869,
+          "ci95_high": 0.007213632760739017
+        },
+        "recall": {
+          "mean": 0.00280702162886071,
+          "ci95_low": 0.0007169820388211193,
+          "ci95_high": 0.005726684270745573
+        },
+        "auc": {
+          "mean": 0.4912370872374041,
+          "ci95_low": 0.47714356329684243,
+          "ci95_high": 0.503735084278214
+        },
+        "top10_diversity": 0.5033171588334262,
+        "top10_popularity_percentile": 0.49597328902227417,
+        "catalog_coverage_top10": 0.2162038449801648
+      }
+    }
+  },
+  "paired_deltas": {
+    "active-popularity": {
+      "ndcg": {
+        "mean": 0.019056109506910085,
+        "ci95_low": 0.008790176312550824,
+        "ci95_high": 0.029904370772995865
+      },
+      "recall": {
+        "mean": -0.003810027128934317,
+        "ci95_low": -0.013012677506615174,
+        "ci95_high": 0.0051223341774127296
+      }
+    },
+    "prior_only-popularity": {
+      "ndcg": {
+        "mean": 0.016355365952371546,
+        "ci95_low": 0.008552957428075282,
+        "ci95_high": 0.02418454307442945
+      },
+      "recall": {
+        "mean": 0.002217145034418876,
+        "ci95_low": -0.006776389982817648,
+        "ci95_high": 0.01145181094943418
+      }
+    },
+    "active-uniform": {
+      "ndcg": {
+        "mean": -0.0017643089331533363,
+        "ci95_low": -0.008510192252261652,
+        "ci95_high": 0.0048887953061339945
+      },
+      "recall": {
+        "mean": -0.006089861483786111,
+        "ci95_low": -0.01168705984700901,
+        "ci95_high": -0.00032278753683982444
+      }
+    },
+    "active-prior_only": {
+      "ndcg": {
+        "mean": 0.0027007435545385386,
+        "ci95_low": -0.004782317898950158,
+        "ci95_high": 0.01005744648137962
+      },
+      "recall": {
+        "mean": -0.006027172163353195,
+        "ci95_low": -0.01164692566618585,
+        "ci95_high": -0.0008151257494186151
+      }
+    }
+  },
+  "examples": [
+    {
+      "user_id": "foursquare:100923",
+      "dominant": "restauration",
+      "hits_top10": 2,
+      "future_items": 35,
+      "metrics": {
+        "active": {
+          "ndcg": 0.1584091525685025,
+          "recall": 0.08571428571428572,
+          "auc": 0.6439690337295495
+        },
+        "prior_only": {
+          "ndcg": 0.1584091525685025,
+          "recall": 0.08571428571428572,
+          "auc": 0.6489539014869073
+        },
+        "popularity": {
+          "ndcg": 0.11004588314904008,
+          "recall": 0.08571428571428572,
+          "auc": 0.6320650028510022
+        }
+      },
+      "paris_top5": [
+        "Taxi Driver. Ciné-club de la bibliothèque Germaine Tillion",
+        "Balades conviviales Paris & environs",
+        "À la découverte des quartiers parisiens : En route vers les usines Panhard et Levassor (13e)",
+        "Samuel Bak, fragments/espoir de Daniela Bak",
+        "Pop Art Car 2.0 - Le défilé Renault ®"
+      ]
+    },
+    {
+      "user_id": "foursquare:130080",
+      "dominant": "visite",
+      "hits_top10": 0,
+      "future_items": 37,
+      "metrics": {
+        "active": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.6145328375058104
+        },
+        "prior_only": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.658881316820506
+        },
+        "popularity": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.440131316820506
+        }
+      },
+      "paris_top5": [
+        "Hommage à Hélène Mouchard-Zay (1940‑2026)",
+        "Les grands âges",
+        "La Course des Lumières",
+        "Rencontre avec Rob Grams : Le cinéma a-t-il un regard de classe ?",
+        "Quinzaine de l'accessibilité et de l'inclusion : exposition \"ce corps qui échappe\" de Hélène Mastrandréas"
+      ]
+    },
+    {
+      "user_id": "foursquare:123374",
+      "dominant": "vie_nocturne",
+      "hits_top10": 0,
+      "future_items": 18,
+      "metrics": {
+        "active": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.6450815767536024
+        },
+        "prior_only": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.6542132394222426
+        },
+        "popularity": {
+          "ndcg": 0.0,
+          "recall": 0.0,
+          "auc": 0.5500816618179962
+        }
+      },
+      "paris_top5": [
+        "À la découverte des quartiers parisiens : En route vers les usines Panhard et Levassor (13e)",
+        "Conférence \"Dans une composition, une fleur est une personne\"",
+        "TaxiTram décembre 2026",
+        "Histoires d'A, un film emblématique de la lutte pour l'IVG",
+        "Tournicoti : les histoires du mercredi"
+      ]
+    }
+  ]
+}

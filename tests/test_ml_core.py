@@ -72,6 +72,15 @@ class FeatureTest(unittest.TestCase):
         x = space.encode(Item("a", text_embedding=(3, 4, 0)))
         np.testing.assert_allclose(x[space.blocks["text"]], [.6, .8, 0])
 
+    def test_popularity_block(self):
+        space = FeatureSpace(CATEGORIES, grid=(2, 2), popularity=True)
+        self.assertEqual(space.dim, SPACE.dim + 1)
+        self.assertEqual(space.names()[-1], "pop:log_visits")
+        self.assertEqual(space.encode(Item("a", popularity=.25))[space.blocks["pop"]].tolist(), [.25])
+        self.assertEqual(space.encode(Item("b"))[space.blocks["pop"]].tolist(), [0])  # inconnue
+        with self.assertRaises(ValueError):
+            space.encode(Item("c", popularity=2))
+
     def test_hours(self):
         self.assertEqual(foursquare_local_hour("2012-04-03T18:08:01Z", 120), 20)
         self.assertEqual(foursquare_local_hour("2012-04-03T01:00:00Z", -120), 23)
@@ -260,6 +269,15 @@ class CommonItemsTest(unittest.TestCase):
             self.assertEqual([item.item_id for item in demo], ["paris_data:e1"])
             with self.assertRaises(ValueError):
                 common_items(path, users=None, sources=["yelp"])
+
+    def test_popularity_uses_given_users_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            encoded = encode_common(self.fixture(Path(tmp)), users=None, popularity_users={"foursquare:train"})
+            pop = encoded.space.blocks["pop"].start
+            self.assertEqual(encoded.counts, {"foursquare:v1": 1})
+            self.assertEqual(encoded.vector("foursquare:v1")[pop], 1.0)
+            self.assertEqual(encoded.vector("foursquare:v2")[pop], 0.0)
+            self.assertEqual(encoded.vector("paris_data:e1")[pop], 0.0)  # pas de visites Paris Data
 
     def test_encoded_items(self):
         with tempfile.TemporaryDirectory() as tmp:
