@@ -1,0 +1,48 @@
+{
+  "script": "swiparis.pairs",
+  "seed": 42,
+  "alpha": 0.75,
+  "neg_per_visit": 1,
+  "strategy_weights": {
+    "geo": 0.3,
+    "cat": 0.25,
+    "time": 0.2,
+    "pop": 0.25
+  },
+  "negatives": "weak: never visited by the user; popularity from train users only",
+  "inputs": {
+    "db": "/home/claude/demo/data/processed/common.sqlite",
+    "db_sha256": "4cd64960cfee0a4257144711cd4d9c23c7b8a3eb152ebb0163e6e5eb0490d22c",
+    "taxonomy_sha256": null,
+    "splits": "internal 60/20/20 by user"
+  },
+  "output": {
+    "path": "/tmp/real/pairs.csv",
+    "sha256": "968972c79d9a495e6117bb6010ac949cfab1e938a3ad55f610639132f715cc0b"
+  },
+  "dropped_common_categories": [],
+  "visits_before_drop": 31694,
+  "venues": 6554,
+  "users": 816,
+  "visits": 31694,
+  "pairs": 31694,
+  "pairs_by_split": {
+    "train": 19308,
+    "test": 6322,
+    "val": 6064
+  },
+  "users_by_split": {
+    "train": 490,
+    "test": 163,
+    "val": 163
+  },
+  "pairs_by_negative_type": {
+    "weak_geo": 9480,
+    "weak_cat": 8051,
+    "weak_pop": 7830,
+    "weak_time": 6333
+  },
+  "same_category_share": 0.4605603584274626,
+  "skipped_visits": 0,
+  "unmapped_categories": []
+}
