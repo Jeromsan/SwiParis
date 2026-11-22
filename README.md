@@ -20,7 +20,38 @@ py -3 start.py
 ```
 
 Ouvrir **http://127.0.0.1:8000**. Sans clé Google, la liste reste utilisable.
-La démo présente le catalogue ; elle n'inclut pas encore de modèle entraîné.
+Cette commande lance l'ancienne démo légère du catalogue.
+
+## Parcours comparatif (FastAPI + Streamlit)
+
+Après avoir préparé le catalogue local, installer le groupe système optionnel :
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[systems]"
+```
+
+Dans une première fenêtre PowerShell, démarrer l'API :
+
+```powershell
+# Facultatif : clé navigateur Google Maps restreinte à localhost.
+$env:GOOGLE_MAPS_API_KEY = 'votre-cle'
+.\.venv\Scripts\swiparis-api.exe
+```
+
+Dans une deuxième fenêtre :
+
+```powershell
+.\.venv\Scripts\swiparis-streamlit.exe
+```
+
+Ouvrir **http://localhost:8501**. La démo demande le consentement du pilote,
+filtre les annonces Paris Data, enregistre les comparaisons dans une base SQLite
+séparée et affiche les recommandations et la carte. Sans clé Google, les fiches
+et leurs liens source restent accessibles. Le scorer initial est un prior par
+fréquence de catégorie, mis à jour avec les choix de la séance. L'export actuel
+du modèle entraîné n'est pas encore compatible avec les features Paris Data ;
+voir [le guide d'intégration](docs/team_handoff.md).
 
 Développement, préparation des données, clé Google et API de logs :
 [guide pour l'équipe](docs/team_handoff.md). Répartition des visites :

@@ -19,10 +19,11 @@
 
 ## Installation depuis le dépôt
 
-Python **3.10+**, testé avec **3.12.3 sur Windows**. Aucune dépendance d'exécution
-externe. Les seuls outils de construction sont figés dans `pyproject.toml` :
-`setuptools==69.2.0` et `wheel==0.43.0`. Ne pas ajouter PyTorch/FastAPI pour utiliser
-ces données ; les autres membres pourront déclarer leurs dépendances séparément.
+Python **3.10+**, testé avec **3.12.3 sur Windows**. La préparation du catalogue
+et la démo historique restent sans dépendance d'exécution externe. Les outils de
+construction sont figés dans `pyproject.toml` : `setuptools==69.2.0` et
+`wheel==0.43.0`. L'API FastAPI et l'interface Streamlit sont optionnelles et
+installées séparément avec `.[systems]`.
 
 ```powershell
 py -3 -m venv .venv
@@ -134,6 +135,51 @@ Google n'est nécessaire pour afficher les coordonnées déjà connues.
 
 ## API de logs pour Systems / Core
 
+Le service FastAPI est `src/swiparis/api.py`. Installer les dépendances système
+puis préparer `data/processed/common.sqlite` comme ci-dessus :
+
+```powershell
+py -3 -m pip install -e ".[systems]"
+$env:GOOGLE_MAPS_API_KEY = 'votre-cle-navigateur' # facultatif
+swiparis-api
+```
+
+Dans une autre fenêtre PowerShell :
+
+```powershell
+swiparis-streamlit
+```
+
+Ouvrir http://localhost:8501. Le serveur API écoute seulement sur
+`127.0.0.1:8000`. Le parcours demande un consentement explicite avant de créer
+une session pilote, filtre les annonces Paris Data par créneau, arrondissement,
+catégorie et budget, propose les comparaisons, puis affiche jusqu'à dix
+recommandations et leur carte. Un prix inconnu ne satisfait jamais un filtre de
+budget. La clé Google est lue dans l'environnement et n'est ni stockée ni
+envoyée au catalogue ; sans clé, la liste reste disponible.
+
+`GET /next_pair?session_id=...` calcule la prochaine paire sans écrire dans la
+base. Le front-end l'enregistre ensuite via `POST /api/comparisons` avec un
+`event_id` stable, ce qui persiste les deux items et leur ordre gauche/droite.
+`POST /log_interaction` enregistre `left`, `right` ou `skip`. `POST
+/recommendations` classe les activités non montrées et enregistre les impressions.
+`POST /api/item_action` enregistre `open` et `save`. `POST /api/sessions`
+nécessite le consentement et fixe les contraintes de la séance.
+
+Le scorer initial utilise la fréquence lissée des catégories Foursquare comme
+prior et met à jour le profil Bradley-Terry après chaque choix. Pour charger un
+prior compatible exporté au format NumPy, définir `SWIPARIS_PRIOR_W0` vers un
+vecteur fini de même dimension que `FeatureSpace` et, facultativement,
+`SWIPARIS_MODEL_VERSION`. Le modèle MLOps présent dans la branche exporte des
+vecteurs Foursquare projetés en 32 dimensions, mais pas encore la projection
+nécessaire pour encoder Paris Data ; il ne peut donc pas être branché directement
+sur ce service. L'intégration de ce bundle attend un export commun convenu avec
+Martin et Merwane.
+
+La réponse HTTP contient `X-Process-Time-Ms` pour mesurer la durée de traitement
+sur le catalogue réel. Il faut mesurer le parcours avec la base distribuée avant
+de rapporter la cible de latence d'environ deux secondes.
+
 `GET /health` donne la version chargée. `GET /api/catalog` fournit le catalogue
 avec `items`, `total`, `categories` et `catalog_version`.
 Paramètres : `start_utc`, `end_utc` (ISO avec offset, tous deux ou aucun),
@@ -157,7 +203,8 @@ HTTP 409. Données invalides : 400 ; route inconnue : 404.
 Le modèle choisit la paire ; le logger randomise seulement gauche/droite **une
 fois** et renvoie l'ordre à afficher. Utiliser cet ordre, y compris lors d'une
 retransmission. Les réponses renvoient l'ID choisi, ou null pour un passage.
-L'arrêt après 5 réponses/8 offres et l'acquisition restent à intégrer côté modèle.
+L'arrêt après 5 réponses/8 offres et l'acquisition sont gérés par le service
+avec `swiparis.ml.selection.next_pair`.
 Les recommandations doivent être éligibles et absentes des comparaisons offertes.
 
 Exemple PowerShell, avec le serveur lancé dans une autre fenêtre :
@@ -192,10 +239,11 @@ from swiparis.catalog import Catalog
 from swiparis.logging_store import LogStore
 catalog = Catalog("data/processed/common.sqlite")
 store = LogStore("data/pilot/interactions.sqlite", catalog)
-# Dans une future route FastAPI : store.answer(corps_json)
+# La route FastAPI appelle directement store.answer(corps_json).
 ```
 
-Le serveur fourni est un adaptateur de démo local, pas le service FastAPI final.
+`swiparis-demo` reste l'adaptateur léger pour la liste/carte et le smoke test.
+`swiparis-api` est le service FastAPI pour les comparaisons et recommandations.
 Les logs de tests sont temporaires et supprimés ; les logs pilotes ne sont jamais
 réinjectés automatiquement dans l'entraînement/test. Le catalogue est lu seul.
 

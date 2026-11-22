@@ -9,11 +9,21 @@ description = "Collecte reproductible Foursquare et Paris Data vers SQLite"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+systems = [
+    "fastapi==0.165.0",
+    "numpy==2.2.6",
+    "streamlit==1.67.0",
+    "uvicorn==0.54.0",
+]
+
 [project.scripts]
 swiparis-import = "swiparis.import_foursquare:main"
 swiparis-paris-import = "swiparis.import_paris_data:main"
 swiparis-prepare = "swiparis.prepare_data:main"
 swiparis-demo = "swiparis.demo:main"
+swiparis-api = "swiparis.api:main"
+swiparis-streamlit = "swiparis.streamlit_app:main"
 swiparis-bundle = "swiparis.bundle:main"
 
 [tool.setuptools.packages.find]
