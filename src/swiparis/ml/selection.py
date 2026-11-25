@@ -13,6 +13,10 @@ Classement : score wᵀφ(i), puis re-ranking MMR (Maximal Marginal Relevance) :
 à chaque rang, l'activité qui maximise
     (1 − d) · pertinence(i) − d · max_{j déjà classé} cos(φ(i), φ(j))
 avec la pertinence ramenée dans [0, 1]. d = 0 revient à trier par score.
+Les activités déjà proposées en comparaison sont exclues des recommandations.
+
+Fin de la phase de comparaisons : 5 réponses gauche/droite ou 8 paires proposées
+(passages et paires sans réponse compris), selon le guide de l'équipe.
 """
 from __future__ import annotations
 
@@ -21,6 +25,19 @@ from typing import Iterable, Sequence
 import numpy as np
 
 from swiparis.ml.model import SessionProfile
+
+MAX_ANSWERS = 5
+MAX_OFFERS = 8
+
+
+def session_finished(n_answers: int, n_offers: int, max_answers: int = MAX_ANSWERS,
+                     max_offers: int = MAX_OFFERS) -> bool:
+    """Vrai quand il faut arrêter les comparaisons et afficher les recommandations.
+
+    `n_answers` : réponses gauche/droite (`SessionProfile.n_updates`) ;
+    `n_offers` : paires proposées, y compris passées ou restées sans réponse.
+    """
+    return n_answers >= max_answers or n_offers >= max_offers
 
 
 def binary_entropy(p):
@@ -50,11 +67,16 @@ def acquisition_matrix(profile: SessionProfile, phi, beta: float = 0.5) -> np.nd
 
 
 def _pool(scores: np.ndarray, size: int, rng: np.random.Generator) -> np.ndarray:
-    """Moitié des activités les mieux classées + tirage uniforme parmi les autres."""
+    """Moitié des activités les mieux classées + tirage uniforme parmi les autres.
+
+    Les égalités de score sont départagées au hasard : sans prior (w₀ = 0), tous
+    les scores valent 0 et un tri stable mettrait toujours les mêmes activités
+    (les premiers identifiants) dans la moitié « mieux classée ».
+    """
     n = len(scores)
     if n <= size:
         return np.arange(n)
-    order = np.argsort(-scores, kind="stable")
+    order = np.lexsort((rng.random(n), -scores))
     top = order[: size // 2]
     explore = rng.choice(order[size // 2:], size=size - len(top), replace=False)
     return np.sort(np.concatenate([top, explore]))
@@ -80,8 +102,9 @@ def next_pair(profile: SessionProfile, phi, ids: Sequence[str],
 
     La recherche se fait dans un pool de `pool_size` activités (coût en pool_size²).
     Sont exclues les paires déjà montrées et celles dont les deux vecteurs sont
-    identiques (Δ = 0 : le choix n'apprend rien). L'ordre gauche/droite est tiré
-    au hasard pour ne pas créer de biais de position. `rng` : graine ou Generator.
+    identiques (Δ = 0 : le choix n'apprend rien). L'ordre gauche/droite n'est pas
+    tiré ici : le journal (`LogStore.offer_comparison`) le tire une fois et le
+    renvoie. `rng` : graine ou Generator, pour le tirage du pool.
     """
     phi = np.asarray(phi, dtype=float)
     ids = list(ids)
@@ -97,8 +120,7 @@ def next_pair(profile: SessionProfile, phi, ids: Sequence[str],
         found = _best_pair(profile, phi, ids, np.arange(len(ids)), shown, beta)
     if found is None:
         return None
-    first, second = found if rng.random() < 0.5 else found[::-1]
-    return ids[first], ids[second]
+    return ids[found[0]], ids[found[1]]
 
 
 def mmr_rerank(scores, phi, k: int, diversity: float = 0.3) -> list[int]:
@@ -127,12 +149,19 @@ def mmr_rerank(scores, phi, k: int, diversity: float = 0.3) -> list[int]:
 
 
 def rank(profile: SessionProfile, phi, ids: Sequence[str], k: int = 10,
-         diversity: float = 0.3) -> list[tuple[str, float]]:
-    """Top-k (identifiant, score du profil), après re-ranking pour la diversité."""
+         diversity: float = 0.3, exclude: Iterable[str] = ()) -> list[tuple[str, float]]:
+    """Top-k (identifiant, score du profil), après re-ranking pour la diversité.
+
+    `exclude` : activités à ne pas recommander, en pratique toutes celles déjà
+    proposées en comparaison pendant la session (exigé par le journal).
+    """
     phi = np.asarray(phi, dtype=float)
     ids = list(ids)
     if len(ids) != len(phi):
         raise ValueError("phi and ids must have the same length")
+    excluded = set(exclude)
+    keep = [i for i, item_id in enumerate(ids) if item_id not in excluded]
+    phi, ids = phi[keep], [ids[i] for i in keep]
     scores = profile.scores(phi)
     return [(ids[i], float(scores[i])) for i in mmr_rerank(scores, phi, k, diversity)]
 

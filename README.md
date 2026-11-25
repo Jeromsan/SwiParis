@@ -1,64 +1,54 @@
-﻿# SwiParis
+# SwiParis
 
-SwiParis est un projet étudiant de recommandation de sorties à Paris.
+Application interactive de recommandation de sorties et loisirs à Paris. En cinq choix rapides entre paires d'activités, SwiParis apprend le profil de la session et recommande jusqu'à dix sorties adaptées, sous contraintes de créneau, d'arrondissement et de budget.
 
-L'application propose des activités deux par deux. L'utilisateur choisit celle
-qu'il préfère pour découvrir progressivement des sorties adaptées à ses goûts :
-culture, promenades, sport, restaurants et vie nocturne.
+## Équipe
 
-L'objectif est de faciliter le choix d'une sortie et de faire découvrir de
-nouveaux lieux grâce à une expérience simple et personnalisée.
+| Membre | Rôle | Responsabilités principales |
+| --- | --- | --- |
+| **Yvan Feugang** | Project Lead | Protocole d'évaluation, splits 60/20/20, contrôle des fuites, ablation |
+| **Jeromsan Judes Ramesh** | Data Engineer | Collecte Foursquare & Paris Data, taxonomie commune, base SQLite et logs |
+| **Merwane Kheloufi** | Core ML Engineer | Représentations d'items, modèle Bradley-Terry, sélection active, re-ranking MMR |
+| **Martin Duverneuil** | ML Operations Engineer | Génération de paires, baselines, entraînement, versioning du prior (`w0`) et serving |
+| **Amine Zaidi** | Systems Engineer | Backend FastAPI, interface Streamlit, intégration du modèle et démo locale |
 
-## Lancer la démo
+## Données
 
-Python 3.10+ requis. Le catalogue préparé est partagé dans `swiparis-demo.zip`
-(à récupérer auprès de l'équipe, les données ne sont pas sur Git). Extraire le
-ZIP et, dans son dossier, lancer PowerShell :
+Les bases brutes et préparées ne sont pas versionnées sur Git. Récupérer `swiparis-demo.zip` auprès de l'équipe et copier `common.sqlite` dans `data/processed/common.sqlite`. Le catalogue partagé comprend 816 utilisateurs, 31 694 visites Foursquare, 6 554 lieux et 1 778 annonces Paris Data, avec une taxonomie commune à dix catégories dans `config/common_taxonomy.json`.
 
-```powershell
-py -3 start.py
-```
+Pour régénérer les bases, voir `docs/team_handoff.md`, `docs/foursquare.md` et `docs/paris_data.md`.
 
-Ouvrir **http://127.0.0.1:8000**. Sans clé Google, la liste reste utilisable.
-Cette commande lance l'ancienne démo légère du catalogue.
+## Installation et lancement
 
-## Parcours comparatif (FastAPI + Streamlit)
-
-Après avoir préparé le catalogue local, installer le groupe système optionnel :
+Prérequis : Python 3.10 ou plus récent. Depuis PowerShell, à la racine du dépôt :
 
 ```powershell
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[systems]"
+.\.venv\Scripts\python.exe -m pip install -e ".[systems,ml]"
 ```
 
-Dans une première fenêtre PowerShell, démarrer l'API :
+Dans une première fenêtre PowerShell, lancer l'API :
 
 ```powershell
-# Facultatif : clé navigateur Google Maps restreinte à localhost.
-$env:GOOGLE_MAPS_API_KEY = 'votre-cle'
-.\.venv\Scripts\swiparis-api.exe
+.\.venv\Scripts\python.exe -m uvicorn swiparis.api:app --host 127.0.0.1 --port 8000
 ```
 
-Dans une deuxième fenêtre :
+Dans une deuxième fenêtre, lancer l'interface :
 
 ```powershell
-.\.venv\Scripts\swiparis-streamlit.exe
+.\.venv\Scripts\python.exe -m streamlit run src/swiparis/streamlit_app.py
 ```
 
-Ouvrir **http://localhost:8501**. La démo demande le consentement du pilote,
-filtre les annonces Paris Data, enregistre les comparaisons dans une base SQLite
-séparée et affiche les recommandations et la carte. Sans clé Google, les fiches
-et leurs liens source restent accessibles. L'API charge le prior Bradley–Terry
-versionné dans `models/` et expose sa version dans `/health`. Si aucun prior
-versionné n'est trouvé, elle utilise le prior de fréquence par catégorie.
-Voir [le guide du serving](docs/serving.md) et [le guide de l'équipe](docs/team_handoff.md).
+Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, filtre les annonces Paris Data, journalise les comparaisons dans une base SQLite séparée et affiche les recommandations et la carte. Sans clé Google Maps, les fiches et liens source restent accessibles. Pour afficher la carte, fournir une clé navigateur restreinte via la variable d'environnement `GOOGLE_MAPS_API_KEY`.
 
-Pour vérifier le parcours API de bout en bout sur le catalogue partagé :
+L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version dans `/health`. Si aucun prior versionné n'est présent, elle utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
+
+## Vérification du parcours API
+
+Avec la base partagée disponible localement :
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/check_api_e2e.py --catalog data/processed/common.sqlite --models-dir models
 ```
 
-Développement, préparation des données, clé Google et API de logs :
-[guide pour l'équipe](docs/team_handoff.md). Répartition des visites :
-[rapport commun](docs/data_summary.md).
+Pour la préparation des données et le rapport de répartition des visites, voir [le guide d'équipe](docs/team_handoff.md) et [le résumé des données](docs/data_summary.md).

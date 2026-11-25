@@ -1,117 +1,212 @@
-# Cœur ML : features, profil de session, paires et classement
+# Cœur ML : features, profil de session, paires, prior et évaluation
 
-Code dans `src/swiparis/ml/`, tests dans `tests/test_ml_core.py`. Seule
-dépendance : `numpy`.
+Code dans `src/swiparis/ml/`, tests dans `tests/test_ml_*.py`. Seule dépendance :
+`numpy`, déclarée en option pour ne pas alourdir la démo de données.
 
 ```powershell
-$env:PYTHONPATH = Join-Path $PWD 'src'
-python -m unittest tests.test_ml_core -v
+.\.venv\Scripts\python.exe -m pip install -e ".[ml]"
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+Sans numpy, les tests ML sont marqués « skipped » au lieu d'échouer (les tests de
+Martin demandent `requirements-ml.txt`). Les tests sur les vraies données ne
+tournent que si `data/processed/common.sqlite` est présent.
 
 ## Fichiers
 
 | Fichier | Rôle |
 | --- | --- |
-| `features.py` | `Item` (activité ramenée à la taxonomie commune) et `FeatureSpace`, qui calcule φ(i) |
-| `catalog.py` | Construit les `Item` depuis les bases SQLite Foursquare et Paris Data |
-| `model.py` | `SessionProfile` : score, P(a ≻ b) et mise à jour après chaque choix |
-| `selection.py` | `next_pair` (fonction d'acquisition) et `rank` (score puis re-ranking pour la diversité) |
+| `features.py` | `Item` et `FeatureSpace`, qui calcule φ(i) |
+| `items.py` | Lit `common.sqlite`, précalcule φ (`encode_common`), visites et popularité |
+| `model.py` | `SessionProfile` : score, P(a ≻ b), mise à jour après chaque réponse |
+| `selection.py` | `next_pair` (acquisition), `session_finished` (arrêt), `rank` (diversité) |
+| `splits.py` | Exporte le découpage unique d'Yvan au format de `swiparis.pairs` |
+| `prior.py` | Apprend le prior w₀ dans l'espace φ (`models/prior_w0_phi.json`) |
+| `simulation.py` | Sessions simulées : scores pour `evaluation.py`, baselines, ablation |
+| `examples.py` | Les 3 profils exemples (`docs/profils_exemples.md`) |
+| `evaluation.py` | Découpage, métriques et bootstrap (Yvan) |
 
 ## Features φ(i)
 
-Même encodage pour Foursquare (entraînement) et Paris Data (démo), une fois les
-catégories ramenées à la taxonomie commune :
+Même encodage pour Foursquare (entraînement) et Paris Data (démo), 28 dimensions
+(`FeatureSpace.names()`) :
 
-- catégories communes : multi-hot normalisé ;
-- prix : `free`, `conditional_free`, `paid`, `unknown`. Le prix inconnu a sa
-  propre dimension, il n'est jamais traité comme gratuit. Foursquare n'a pas de
-  prix : tous ses lieux sont `unknown`, donc le poids du prix ne s'apprend
-  qu'en session ;
-- moment de la journée : part des visites (Foursquare) ou des séances
-  (Paris Data) la nuit (0-6 h), le matin, l'après-midi et le soir ;
+- 10 catégories communes, triées par code, en multi-hot normalisé ;
+- prix : `free`, `conditional_free`, `paid`, `unknown`. Le prix inconnu n'est
+  jamais traité comme gratuit. Tous les lieux Foursquare sont `unknown` ;
+- moment de la journée : part des visites (Foursquare) ou des séances (Paris
+  Data) la nuit, le matin, l'après-midi et le soir ;
 - zone : cellule d'une grille 3 × 3 sur le rectangle Paris des imports ;
-- embedding texte : prévu (`text_dim`), désactivé par défaut.
+- popularité : log(1 + visites) / log(1 + maximum), sur les visites des
+  utilisateurs d'entraînement. Les annonces Paris Data n'ont pas de visites :
+  le bloc vaut 0 pour elles, il ne joue donc pas dans la démo.
 
-Fuite de données : `foursquare_items(..., users=...)` calcule le moment de la
-journée avec les check-ins des seuls utilisateurs donnés. Passer les
-utilisateurs d'entraînement.
+Contre les fuites, le moment de la journée et la popularité ne sont calculés
+qu'avec les visites des utilisateurs d'entraînement (`users=` et
+`popularity_users=` de `encode_common`).
 
-## Modèle
+## Modèle de session
 
 Bradley-Terry linéaire : P(a ≻ b | u) = σ(wᵤᵀ(φ(a) − φ(b))), score(i) = wᵤᵀφ(i).
+Après une réponse gauche ou droite, avec Δ = φ(choisi) − φ(rejeté) :
 
-Après un choix, avec Δ = φ(choisi) − φ(rejeté) :
+- mode `sgd` (référence) : w ← w + η(1 − σ(wᵀΔ))Δ − λ(w − w₀) ;
+- mode `bayes` : régression logistique bayésienne en ligne (Laplace).
 
-- mode `sgd` (par défaut) : w ← w + η(1 − σ(wᵀΔ))Δ − λ(w − w₀). Le rappel se
-  fait vers le prior w₀ et pas vers 0, sinon le prior appris hors ligne
-  s'efface au fil de la session. Avec w₀ = 0, on retrouve la règle −λw ;
-- mode `bayes` : régression logistique bayésienne en ligne (Laplace). Le profil
-  est N(μ, Σ). Σ diminue dans la direction des choix déjà faits, et la
-  probabilité prédite en tient compte : σ(μᵀΔ / √(1 + πΔᵀΣΔ/8)).
+Un passage (`skip`) ne modifie pas le profil. La session part de w₀ et s'arrête
+après 5 réponses gauche/droite ou 8 paires proposées.
 
-## Choix de la paire suivante
+## Choix des paires et classement
 
-A(i, j) = H(P(i ≻ j)) + β(1 − cos(φ(i), φ(j))), avec H l'entropie binaire.
-L'entropie seule choisirait deux activités presque identiques (P ≈ 0,5 car
-Δ ≈ 0), qui n'apprennent rien. Le terme cosinus corrige ça. La recherche se fait
-dans un pool (moitié des mieux classées, moitié au hasard). Les paires déjà
-montrées et les paires de vecteurs identiques sont exclues. Le côté
-gauche/droite est tiré au hasard.
+A(i, j) = H(P(i ≻ j)) + β(1 − cos(φ(i), φ(j))), dans un pool de 40 activités
+(moitié les mieux classées, égalités départagées au hasard ; moitié au hasard).
+Les paires déjà montrées et les vecteurs identiques sont exclus. Le côté
+gauche/droite est tiré par le journal (`LogStore.offer_comparison`).
 
-## Classement
+Classement : score wᵀφ(i), puis re-ranking MMR (`diversity`), sans les activités
+déjà proposées en comparaison.
 
-Les filtres (créneau, arrondissement, budget) s'appliquent avant, côté API.
-Ensuite : score wᵀφ(i), puis re-ranking MMR avec un paramètre `diversity`
-(0 = simple tri par score). `intra_list_diversity` mesure la diversité d'une
-liste, pour l'ablation.
+## Prior w₀
 
-## Valeurs par défaut (à régler sur la validation)
+`prior.py` apprend w₀ avec le même modèle que la session (perte logistique sur les
+paires de Martin, utilisateurs d'entraînement seulement), résolu exactement par
+Newton. λ est choisi sur la perte de validation. Deux corrections, mesurées :
 
-| Paramètre | Défaut |
-| --- | --- |
-| η (`eta`) | 0,5 |
-| λ (`lam`) | 0,05 |
-| σ₀² (`prior_var`, mode bayes) | 1,0 |
-| β (`beta`) | 0,5 |
-| `pool_size` | 40 |
-| `diversity` | 0,3 |
+- **Moment de la journée exclu de w₀.** Dans une paire d'entraînement, le lieu
+  choisi a toujours un moment connu, puisque sa propre visite le calcule (100 %
+  contre 79 % en validation). Avec ce bloc, w₀ ordonnait 60 % des paires
+  d'entraînement mais 50 % en validation. Ce bloc reste à 0 dans w₀ ; la session
+  l'apprend.
+- **Popularité sans la visite de l'utilisateur.** Pour la même raison, la
+  popularité du lieu choisi d'une paire d'entraînement est recalculée sans les
+  visites de cet utilisateur.
 
-Mesure sur 1 778 activités aléatoires : moins de 2 ms par paire et moins de
-10 ms pour un top 10, donc loin de la limite de 2 s.
+Les négatifs de Martin sont tirés selon la popularité : sur ces paires, être
+populaire distingue peu le choisi du rejeté. Le poids de popularité de w₀ est donc
+multiplié par un facteur choisi sur le NDCG@10 de validation (×2 retenu).
+Effet de bord : comme les rejetés sont souvent des restaurants proches et
+populaires, w₀ pénalise la restauration (−0,37) pour tout le monde. C'est un
+artefact des négatifs, pas un vrai goût.
 
-## État d'avancement (18/11/2026, Merwane)
+## Protocole d'évaluation
 
-Fait :
+- Découpage unique (`splits.py`) : celui d'Yvan, graine 42, 490 / 163 / 163
+  utilisateurs. Avant, `swiparis.pairs` tirait son propre découpage : 93 des 163
+  utilisateurs test servaient à entraîner le w₀ de Martin. Les paires sont
+  maintenant générées avec `--splits`.
+- Pour chaque utilisateur évalué : ses 5 premiers lieux distincts forment le
+  profil, les suivants servent seulement à mesurer.
+- Les réponses aux paires sont **simulées** : l'utilisateur choisit l'activité la
+  plus proche de ses lieux de profil (cosinus sur catégorie, prix, moment, zone).
+- Méthodes : session avec sélection active, session avec paires tirées au hasard
+  (ablation, même budget), w₀ seul, popularité, hasard.
+- Réglages choisis sur la validation : λ = 1e-4, popularité ×2, η = 0,05
+  (meilleur NDCG@10). Le test a été lancé une fois, avec ces réglages.
 
-- φ(i) commun à Foursquare et Paris Data, avec le chargement des deux bases SQLite.
-- Modèle Bradley-Terry et mise à jour de session (modes `sgd` et `bayes`).
-- Choix de la paire suivante (entropie + distance cosinus) et classement avec
-  re-ranking pour la diversité.
-- 20 tests unitaires, dont les vérifications de la semaine 2 (inverser les
-  choix change l'activité classée première, une paire déjà montrée est exclue).
+## Résultats
 
-Reste à faire :
+Test, 162 utilisateurs évalués (script officiel `swiparis.ml.evaluation` pour
+active/uniforme ; mêmes fonctions pour les autres méthodes) :
 
-- Vérifier les profils exemples : 3 utilisateurs et leurs recommandations pour
-  le rapport de semaine 3.
-- Écrire la spécification de l'algorithme (1 à 2 pages) avec Yvan.
-- Régler η, λ, β et `diversity` sur la validation, avec Martin.
-- Comparer avec le prototype Node.js s'il est retrouvé (il n'est pas dans le repo).
+| Méthode | NDCG@10 [IC 95 %] | Recall@20 [IC 95 %] | AUC |
+| --- | --- | --- | --- |
+| Session, sélection active | 0,086 [0,067 ; 0,107] | 0,077 [0,062 ; 0,092] | 0,662 |
+| Session, paires au hasard | 0,088 [0,068 ; 0,110] | 0,083 [0,068 ; 0,099] | 0,660 |
+| w₀ seul | 0,083 [0,066 ; 0,105] | 0,083 [0,067 ; 0,099] | 0,655 |
+| Popularité | 0,067 [0,050 ; 0,084] | 0,081 [0,066 ; 0,097] | 0,654 |
+| Hasard | 0,003 [0,001 ; 0,007] | 0,003 [0,001 ; 0,006] | 0,491 |
 
-En attente de :
+Écarts appariés sur le test (moyenne, IC 95 % bootstrap) :
 
-- **Jeromsan** : la taxonomie commune (libellé source → catégorie commune), les
-  bases `foursquare.sqlite` et `paris_data.sqlite`, et l'ajout de `numpy` aux
-  dépendances du `pyproject.toml`.
-- **Martin** : le prior w₀ entraîné avec le même `FeatureSpace` (même ordre des
-  dimensions, voir `FeatureSpace.names()`).
-- **Yvan** : valider dans la spécification le rappel vers w₀, −λ(w − w₀), au
-  lieu de −λw ; fournir la liste des utilisateurs d'entraînement, utilisée par
-  `foursquare_items` pour éviter les fuites.
-- **Amine** : `next_pair` et `rank` attendent des activités déjà filtrées
-  (créneau, arrondissement, budget). L'état d'une session se sauvegarde avec
-  `SessionProfile.to_dict()` et se recharge avec `SessionProfile.from_dict()`.
+| Comparaison | NDCG@10 | Recall@20 |
+| --- | --- | --- |
+| active − popularité | +0,019 [+0,009 ; +0,030] | −0,004 [−0,013 ; +0,005] |
+| w₀ seul − popularité | +0,016 [+0,009 ; +0,024] | +0,002 [−0,007 ; +0,012] |
+| active − paires au hasard | −0,002 [−0,009 ; +0,005] | −0,006 [−0,012 ; −0,000] |
+| active − w₀ seul | +0,003 [−0,005 ; +0,010] | −0,006 [−0,012 ; −0,001] |
 
-À caler en réunion : les signatures prévues étaient `next_pair(session, contraintes)`
-et `rank(session, contraintes)`. Ici, elles prennent le profil, la matrice φ et
-les identifiants des activités éligibles. L'API peut les envelopper avec ses filtres.
+Compromis précision / personnalisation selon η (validation, sélection active) :
+
+| η | NDCG@10 | Top 10 commun entre deux utilisateurs (Jaccard) | Top 10 dans les catégories du profil | Couverture du catalogue |
+| --- | --- | --- | --- | --- |
+| 0,05 | 0,097 | 0,64 | 0,43 | 0,3 % |
+| 0,2 | 0,085 | 0,32 | 0,44 | 1,5 % |
+| 0,5 | 0,058 | 0,06 | 0,64 | 5,8 % |
+| 1,0 | 0,022 | 0,02 | 0,81 | 9,5 % |
+
+Fichiers : `docs/resultats_ml/` (rapports JSON) et `docs/profils_exemples.md`.
+
+## Lecture honnête
+
+- Le modèle bat le hasard de très loin, et la popularité sur le NDCG@10 (écart
+  apparié significatif). Il fait jeu égal avec elle sur le Recall@20.
+- Ce gain vient du prior w₀ (popularité + catégorie + zone), pas de la session :
+  avec η = 0,05, les mises à jour bougent peu le profil, et les utilisateurs
+  reçoivent presque la même liste (64 % en commun). Les profils exemples le
+  montrent : un utilisateur qui choisit des restaurants reçoit les lieux de
+  culture les plus célèbres.
+- La sélection active ne fait pas mieux que les paires au hasard dans ce
+  protocole. Pas de preuve de l'innovation pour l'instant (Q4).
+- Pourquoi : φ est grossier (des centaines de lieux ont le même φ), les réponses
+  sont simulées, et les visites futures Foursquare vont surtout vers les lieux les
+  plus fréquentés. Personnaliser fait baisser le NDCG dans ce protocole.
+
+## Décisions à prendre en équipe
+
+1. **η de la démo.** 0,05 maximise le NDCG mais ne personnalise presque pas ;
+   0,2 garde le NDCG au niveau de la popularité et divise par deux les listes
+   communes ; 0,5 personnalise vraiment (64 % du top 10 dans les goûts) mais perd
+   en NDCG. Le code garde 0,5 par défaut tant que l'équipe n'a pas tranché.
+   Le test ne doit pas être relancé pour choisir.
+2. **Restauration et vie nocturne** (question de Martin). Les retirer de
+   l'entraînement enlèverait aussi l'artefact du w₀ sur la restauration. Il faut
+   alors relancer `pairs`, `prior` puis l'évaluation.
+
+## Reproduire
+
+```powershell
+$env:PYTHONPATH = Join-Path $PWD 'src'
+python -m swiparis.ml.splits                                    # data/processed/splits.csv
+python -m swiparis.pairs --db data/processed/common.sqlite --output data/processed/pairs.csv `
+  --manifest outputs/pairs_manifest.json --seed 42 --splits data/processed/splits.csv
+python -m swiparis.ml.prior --force                             # models/prior_w0_phi.json
+python -m swiparis.ml.simulation --split val --eta 0.05         # réglages sur la validation
+python -m swiparis.ml.simulation --split test --eta 0.05 --scores outputs/scores_test.csv
+python -m swiparis.ml.evaluation --scores outputs/scores_test.csv --output outputs/evaluation_test.json
+python -m swiparis.ml.examples                                  # docs/profils_exemples.md
+```
+
+## Brancher dans l'API
+
+```python
+from swiparis.catalog import Catalog
+from swiparis.logging_store import LogStore
+from swiparis.ml import SessionProfile, encode_common, next_pair, rank, session_finished
+from swiparis.ml.prior import load_prior
+from swiparis.ml.splits import load_splits
+
+DB = "data/processed/common.sqlite"
+train = {u for u, s in load_splits("data/processed/splits.csv").items() if s == "train"}
+catalog = Catalog(DB)
+store = LogStore("data/pilot/interactions.sqlite", catalog)
+encoded = encode_common(DB, users=train, sources=["paris_data"], popularity_users=train)  # au démarrage
+w0 = load_prior("models/prior_w0_phi.json", encoded.space)        # vérifie l'ordre des features
+profile = SessionProfile(w0)                                      # par session (to_dict/from_dict)
+eligible = [i["item_id"] for i in catalog.list_items(constraints, limit=None)["items"]]
+phi = encoded.rows(eligible)
+if not session_finished(profile.n_updates, len(offered)):
+    pair = next_pair(profile, phi, eligible, shown_pairs=offered)  # puis store.offer_comparison(...)
+# Après store.answer(...) : profile.answer(encoded.vector(left), encoded.vector(right), choice)
+top = rank(profile, phi, eligible, k=10, exclude={i for p in offered for i in p})
+```
+
+## État d'avancement (20/11/2026, Merwane)
+
+Fait : φ commun, modèle de session, sélection des paires, arrêt 5/8, classement
+avec diversité, branchement sur `common.sqlite` et le journal ; découpage unique ;
+prior w₀ dans l'espace φ ; évaluation test complète avec ablation ; 3 profils
+exemples. 62 tests passent.
+
+Reste : décisions d'équipe ci-dessus ; mettre à jour `docs/evaluation.md`
+(Yvan : il annonce encore qu'il n'y a ni w₀ ni résultats) ; brancher dans l'API
+(Amine).
