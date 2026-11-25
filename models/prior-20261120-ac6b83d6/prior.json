@@ -1,0 +1,153 @@
+{
+  "model": "bradley_terry_linear_phi",
+  "created_utc": "2026-11-20T14:30:10Z",
+  "feature_names": [
+    "cat:atelier",
+    "cat:autre",
+    "cat:culture",
+    "cat:loisirs",
+    "cat:nature",
+    "cat:restauration",
+    "cat:spectacle",
+    "cat:sport",
+    "cat:vie_nocturne",
+    "cat:visite",
+    "price:free",
+    "price:conditional_free",
+    "price:paid",
+    "price:unknown",
+    "time:night",
+    "time:morning",
+    "time:afternoon",
+    "time:evening",
+    "zone:0-0",
+    "zone:0-1",
+    "zone:0-2",
+    "zone:1-0",
+    "zone:1-1",
+    "zone:1-2",
+    "zone:2-0",
+    "zone:2-1",
+    "zone:2-2",
+    "pop:log_visits"
+  ],
+  "grid": [
+    3,
+    3
+  ],
+  "trained_blocks": [
+    "cat",
+    "price",
+    "zone",
+    "pop"
+  ],
+  "w0": [
+    0.0,
+    -0.31719115,
+    0.28175393,
+    -0.2256956,
+    0.00329771,
+    -0.31215241,
+    0.12580575,
+    0.17780169,
+    -0.06897255,
+    0.33535263,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.04705274,
+    -0.01155321,
+    -0.06649861,
+    0.09866392,
+    0.06731965,
+    -0.11336491,
+    -0.11917668,
+    0.07438929,
+    0.02316782,
+    0.88825441
+  ],
+  "lambda": 0.0001,
+  "pop_scale": 2,
+  "pop_scale_search": [
+    {
+      "pop_scale": 1,
+      "val_ndcg10": 0.07564222784919315
+    },
+    {
+      "pop_scale": 2,
+      "val_ndcg10": 0.09767253708517709
+    },
+    {
+      "pop_scale": 4,
+      "val_ndcg10": 0.09505233099969135
+    },
+    {
+      "pop_scale": 8,
+      "val_ndcg10": 0.09117765708218695
+    },
+    {
+      "pop_scale": 16,
+      "val_ndcg10": 0.09079866546463271
+    }
+  ],
+  "metrics": {
+    "train_loss": 0.6751785219171588,
+    "val_loss": 0.673911623353805,
+    "train_accuracy": 0.5663689239717491,
+    "val_accuracy": 0.571724366407156
+  },
+  "lambda_search": [
+    {
+      "lambda": 0.0001,
+      "train_loss": 0.6751785219171588,
+      "val_loss": 0.673911623353805,
+      "train_accuracy": 0.5663689239717491,
+      "val_accuracy": 0.571724366407156
+    },
+    {
+      "lambda": 0.001,
+      "train_loss": 0.6751998147194845,
+      "val_loss": 0.6740192404612587,
+      "train_accuracy": 0.5674594931449938,
+      "val_accuracy": 0.572386947159185
+    },
+    {
+      "lambda": 0.01,
+      "train_loss": 0.6757668749535004,
+      "val_loss": 0.6753229002112155,
+      "train_accuracy": 0.565849605317823,
+      "val_accuracy": 0.570067914527083
+    },
+    {
+      "lambda": 0.1,
+      "train_loss": 0.681479400398689,
+      "val_loss": 0.6822863845028866,
+      "train_accuracy": 0.565330286663897,
+      "val_accuracy": 0.5670863011429519
+    },
+    {
+      "lambda": 1.0,
+      "train_loss": 0.6905919489772997,
+      "val_loss": 0.6908401010389793,
+      "train_accuracy": 0.5642916493560449,
+      "val_accuracy": 0.5667550107669372
+    }
+  ],
+  "inputs": {
+    "data_version": "common-2f8e1b3a68d638ee",
+    "pairs_sha256": "1caac1713c7e21ce27e5dd8874c1dda6b5ca1fea45c3157ae14810afd9a2067b",
+    "pairs_by_split": {
+      "train": 19256,
+      "val": 6037,
+      "test": 6401
+    },
+    "train_users": 490
+  },
+  "popularity_users": "train",
+  "note": "Test users are never read. Time-of-day and popularity use training users' visits only."
+}

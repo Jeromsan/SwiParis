@@ -4,8 +4,8 @@ Run after preparing ``data/processed/common.sqlite`` with:
     uvicorn swiparis.api:app --host 127.0.0.1 --port 8000
 
 The service uses the shared SQLite catalog and the separate pilot database.
-Until a Paris Data compatible trained prior is available, it uses a transparent
-category-frequency prior and the existing Bradley-Terry session updates.
+It loads the versioned Bradley-Terry prior from ``models/`` and applies session
+updates. If no prior is registered, it falls back to category frequency.
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from .logging_store import Conflict, LogStore
 from .ml.features import FeatureSpace, Item, source_local_hour, time_profile
 from .ml.model import SessionProfile
 from .ml.selection import next_pair, rank
+from .serving import load_model
 
 
 class SessionPayload(BaseModel):
@@ -100,6 +101,20 @@ def _load_prior(catalog: Catalog, feature_space: FeatureSpace) -> tuple[np.ndarr
     return prior, os.environ.get("SWIPARIS_MODEL_VERSION", fallback_version)
 
 
+def _load_scorer(catalog: Catalog) -> tuple[FeatureSpace, np.ndarray, str]:
+    """Trained prior from models/ (SWIPARIS_MODELS_DIR), else the category-frequency prior."""
+    try:
+        model = load_model(os.environ.get("SWIPARIS_MODELS_DIR", "models"))
+    except FileNotFoundError:
+        feature_space = FeatureSpace(sorted(catalog.categories))
+        prior, version = _load_prior(catalog, feature_space)
+        return feature_space, prior, version
+    unknown = set(catalog.categories) - set(model.space.categories)
+    if unknown:
+        raise ValueError(f"Catalog categories unknown to the trained prior: {sorted(unknown)}")
+    return model.space, model.w0, model.version
+
+
 def _item_vector(row: dict[str, Any]) -> Item:
     location = row["locations"][0] if row.get("locations") else {}
     occurrence = row.get("next_occurrence") or {}
@@ -129,8 +144,7 @@ def create_app(catalog_path: str | Path | None = None,
         default_catalog, default_logs = _paths()
         catalog = Catalog(catalog_path or default_catalog)
         logs = LogStore(logs_path or default_logs, catalog)
-        feature_space = FeatureSpace(sorted(catalog.categories))
-        prior, model_version = _load_prior(catalog, feature_space)
+        feature_space, prior, model_version = _load_scorer(catalog)
         app.state.catalog = catalog
         app.state.logs = logs
         app.state.feature_space = feature_space

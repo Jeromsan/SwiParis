@@ -48,10 +48,16 @@ Dans une deuxième fenêtre :
 Ouvrir **http://localhost:8501**. La démo demande le consentement du pilote,
 filtre les annonces Paris Data, enregistre les comparaisons dans une base SQLite
 séparée et affiche les recommandations et la carte. Sans clé Google, les fiches
-et leurs liens source restent accessibles. Le scorer initial est un prior par
-fréquence de catégorie, mis à jour avec les choix de la séance. L'export actuel
-du modèle entraîné n'est pas encore compatible avec les features Paris Data ;
-voir [le guide d'intégration](docs/team_handoff.md).
+et leurs liens source restent accessibles. L'API charge le prior Bradley–Terry
+versionné dans `models/` et expose sa version dans `/health`. Si aucun prior
+versionné n'est trouvé, elle utilise le prior de fréquence par catégorie.
+Voir [le guide du serving](docs/serving.md) et [le guide de l'équipe](docs/team_handoff.md).
+
+Pour vérifier le parcours API de bout en bout sur le catalogue partagé :
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_api_e2e.py --catalog data/processed/common.sqlite --models-dir models
+```
 
 Développement, préparation des données, clé Google et API de logs :
 [guide pour l'équipe](docs/team_handoff.md). Répartition des visites :

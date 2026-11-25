@@ -12,6 +12,7 @@ dependencies = []
 [project.optional-dependencies]
 systems = [
     "fastapi==0.165.0",
+    "httpx==0.28.1",
     "numpy==2.2.6",
     "streamlit==1.67.0",
     "uvicorn==0.54.0",
@@ -25,6 +26,7 @@ swiparis-demo = "swiparis.demo:main"
 swiparis-api = "swiparis.api:main"
 swiparis-streamlit = "swiparis.streamlit_app:main"
 swiparis-bundle = "swiparis.bundle:main"
+swiparis-serving = "swiparis.serving:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
