@@ -1,27 +1,35 @@
 ﻿# SwiParis
 
-SwiParis est un projet étudiant de recommandation de sorties à Paris.
+Application interactive de recommandation de sorties et loisirs à Paris.
+En 5 choix rapides entre paires d'activités (sous contraintes de créneau, d'arrondissement et de budget), SwiParis apprend le profil de la session et recommande jusqu'à 10 sorties adaptées.
 
-L'application propose des activités deux par deux. L'utilisateur choisit celle
-qu'il préfère pour découvrir progressivement des sorties adaptées à ses goûts :
-culture, promenades, sport, restaurants et vie nocturne.
+## Équipe
 
-L'objectif est de faciliter le choix d'une sortie et de faire découvrir de
-nouveaux lieux grâce à une expérience simple et personnalisée.
+| Membre | Rôle | Responsabilités principales |
+| --- | --- | --- |
+| **Yvan Feugang** | Project Lead | Protocole d'évaluation, splits 60/20/20, contrôle des fuites, ablation |
+| **Jeromsan Judes Ramesh** | Data Engineer | Collecte Foursquare & Paris Data, taxonomie commune, base SQLite et logs |
+| **Merwane Kheloufi** | Core ML Engineer | Représentations d'items, modèle Bradley-Terry, sélection active, re-ranking MMR |
+| **Martin Duverneuil** | ML Operations Engineer | Génération de paires, baselines, entraînement, versioning du prior (`w0`) et serving |
+| **Amine Zaidi** | Systems Engineer | Backend FastAPI, interface Streamlit, intégration du modèle et démo locale |
 
-## Lancer la démo
+## Données
 
-Python 3.10+ requis. Le catalogue préparé est partagé dans `swiparis-demo.zip`
-(à récupérer auprès de l'équipe, les données ne sont pas sur Git). Extraire le
-ZIP et, dans son dossier, lancer PowerShell :
+Les bases brutes et préparées ne sont pas versionnées sur Git.
+La base partagée `data/processed/common.sqlite` (816 utilisateurs, 31 694 visites Foursquare, 6 554 lieux, 1 778 annonces Paris Data, taxonomie commune à 10 catégories dans `config/common_taxonomy.json`) est distribuée dans l'archive `swiparis-demo.zip` auprès de l'équipe.
+
+1. Récupérer `swiparis-demo.zip` auprès de l'équipe.
+2. Copier `common.sqlite` dans `data/processed/common.sqlite`.
+
+Pour régénérer les bases depuis les fichiers bruts, voir `docs/team_handoff.md`, `docs/foursquare.md` et `docs/paris_data.md`.
+
+## Installation rapide (démo, < 10 min)
+
+Prérequis : **Python 3.10+** (testé sous Python 3.12).
 
 ```powershell
-py -3 start.py
-```
-
-Ouvrir **http://127.0.0.1:8000**. Sans clé Google, la liste reste utilisable.
-La démo présente le catalogue ; elle n'inclut pas encore de modèle entraîné.
-
-Développement, préparation des données, clé Google et API de logs :
-[guide pour l'équipe](docs/team_handoff.md). Répartition des visites :
-[rapport commun](docs/data_summary.md).
+git clone [https://github.com/Jeromsan/SwiParis.git](https://github.com/Jeromsan/SwiParis.git)
+cd SwiParis
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
