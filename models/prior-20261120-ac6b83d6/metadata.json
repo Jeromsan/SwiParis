@@ -1,0 +1,54 @@
+{
+  "version": "prior-20261120-ac6b83d6",
+  "kind": "bradley_terry_linear_phi",
+  "created_utc": "2026-11-20T14:30:10Z",
+  "prior_sha256": "ac6b83d689f5e396abecd286a438b9e4e204fe49a8233ea0b295de475e1a51bd",
+  "git_commit": "91129406d15fe98cc3eb497ffc058068274844ec",
+  "feature_dim": 28,
+  "categories": [
+    "atelier",
+    "autre",
+    "culture",
+    "loisirs",
+    "nature",
+    "restauration",
+    "spectacle",
+    "sport",
+    "vie_nocturne",
+    "visite"
+  ],
+  "grid": [
+    3,
+    3
+  ],
+  "popularity_feature": true,
+  "trained_blocks": [
+    "cat",
+    "price",
+    "zone",
+    "pop"
+  ],
+  "lambda": 0.0001,
+  "pop_scale": 2,
+  "metrics": {
+    "train_loss": 0.6751785219171588,
+    "val_loss": 0.673911623353805,
+    "train_accuracy": 0.5663689239717491,
+    "val_accuracy": 0.571724366407156
+  },
+  "inputs": {
+    "data_version": "common-2f8e1b3a68d638ee",
+    "pairs_sha256": "1caac1713c7e21ce27e5dd8874c1dda6b5ca1fea45c3157ae14810afd9a2067b",
+    "pairs_by_split": {
+      "train": 19256,
+      "val": 6037,
+      "test": 6401
+    },
+    "train_users": 490
+  },
+  "libraries": {
+    "numpy": "2.2.6",
+    "python": "3.12.6"
+  },
+  "note": "Test users are never read. Time-of-day and popularity use training users' visits only."
+}
