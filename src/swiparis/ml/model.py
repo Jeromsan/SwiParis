@@ -50,7 +50,7 @@ class SessionProfile:
         self.prior = prior.copy()
         self.w = prior.copy()  # μ en mode bayésien
         self.cov = prior_var * np.eye(prior.size) if mode == "bayes" else None
-        self.n_updates = 0
+        self.n_updates = 0  # réponses gauche/droite intégrées (les passages ne comptent pas)
 
     @property
     def dim(self) -> int:
@@ -92,6 +92,20 @@ class SessionProfile:
             self.w = self.w + (1 - p) * (self.cov @ delta)
         self.n_updates += 1
         return p
+
+    def answer(self, phi_left, phi_right, choice: str) -> float | None:
+        """Applique une réponse du journal : `left`, `right` ou `skip`.
+
+        Un passage ne dit rien sur la préférence : le profil ne bouge pas et la
+        méthode renvoie None. Sinon, renvoie la probabilité prédite du choix fait.
+        """
+        if choice == "left":
+            return self.update(phi_left, phi_right)
+        if choice == "right":
+            return self.update(phi_right, phi_left)
+        if choice == "skip":
+            return None
+        raise ValueError("choice must be left, right or skip")
 
     def to_dict(self) -> dict:
         """État sérialisable en JSON (pour garder la session côté API ou la journaliser)."""
