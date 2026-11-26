@@ -7,11 +7,16 @@ try:
 except Exception:  # torch absent ou cassé : ces tests sont ignorés
     torch = None
 
+try:
+    import matplotlib  # noqa: F401
+except Exception:
+    matplotlib = None
+
 from swiparis.pairs import assign_splits, build_pairs, load_foursquare
 from synthetic import make_db
 
 
-@unittest.skipIf(torch is None, "torch indisponible")
+@unittest.skipIf(torch is None or matplotlib is None, "torch ou matplotlib indisponible")
 class TrainTests(unittest.TestCase):
     def test_training_beats_popularity_and_versions_model(self):
         from swiparis.registry import load_latest
