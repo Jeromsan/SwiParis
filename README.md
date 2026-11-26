@@ -39,7 +39,16 @@ Dans une deuxième fenêtre, lancer l'interface :
 .\.venv\Scripts\python.exe -m streamlit run src/swiparis/streamlit_app.py
 ```
 
-Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, vérifie qu'au moins six sorties correspondent aux filtres, journalise les comparaisons dans une base SQLite séparée, puis affiche les trois recommandations et leur carte. Les réponses récentes favorisent les catégories et sorties similaires aux choix précédents ; une comparaison sur quatre peut départager deux sorties déjà choisies. Les sorties explicitement écartées ne sont plus proposées. Sans clé Google Maps, une carte OpenStreetMap interactive s'affiche avec des liens Google Maps sur les repères. Pour utiliser la carte Google intégrée, fournir une clé navigateur restreinte via `GOOGLE_MAPS_API_KEY` dans l'environnement du processus API.
+Sur macOS ou Linux, les mêmes étapes dans un terminal :
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[systems,ml]"
+.venv/bin/python -m uvicorn swiparis.api:app --host 127.0.0.1 --port 8000      # fenêtre 1
+.venv/bin/python -m streamlit run src/swiparis/streamlit_app.py                # fenêtre 2
+```
+
+Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, vérifie qu'au moins six sorties correspondent aux filtres, journalise les comparaisons dans une base SQLite séparée, puis affiche les trois meilleures recommandations et leur carte. Les réponses récentes favorisent les catégories et sorties similaires aux choix précédents ; une comparaison sur quatre peut départager deux sorties déjà choisies. Les sorties explicitement écartées ne sont plus proposées. Sans clé Google Maps, une carte OpenStreetMap interactive s'affiche avec des liens Google Maps sur les repères. Pour utiliser la carte Google intégrée, fournir une clé navigateur restreinte via `GOOGLE_MAPS_API_KEY` dans l'environnement du processus API.
 
 L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version du prior et de la politique de session dans `/health`. Elle réapplique les choix au profil de la séance, utilise un signal de préférence récent pour les paires et le classement, garde les sorties choisies comme candidates et écarte celles explicitement rejetées. Si aucun prior versionné n'est présent, l'API utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
 
@@ -52,3 +61,7 @@ Avec la base partagée disponible localement :
 ```
 
 Pour la préparation des données et le rapport de répartition des visites, voir [le guide d'équipe](docs/team_handoff.md) et [le résumé des données](docs/data_summary.md).
+
+## Ré-entraînement du modèle
+
+Pour relancer le pipeline MLOps, installez les dépendances avec `.\.venv\Scripts\python.exe -m pip install -r requirements-ml.txt`, puis suivez [le guide du pipeline](docs/ml_pipeline.md) pour générer les paires avec `swiparis.pairs` et réentraîner le modèle. Pour enregistrer le prior utilisé par le serving, exécutez `.\.venv\Scripts\python.exe -m swiparis.serving register --prior models/prior_w0_phi.json --models-dir models` ; voir aussi [le guide du serving](docs/serving.md).
