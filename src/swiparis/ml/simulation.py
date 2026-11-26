@@ -30,7 +30,7 @@ from swiparis.ml.evaluation import _mean_ci, ranking_metrics, temporal_holdout
 from swiparis.ml.items import encode_common, load_histories
 from swiparis.ml.model import SessionProfile
 from swiparis.ml.prior import load_prior
-from swiparis.ml.selection import intra_list_diversity, next_pair, session_finished
+from swiparis.ml.selection import MAX_ANSWERS, MAX_OFFERS, intra_list_diversity, next_pair, session_finished
 from swiparis.ml.splits import load_splits
 
 STRATEGIES = ("active", "uniform")
@@ -56,14 +56,19 @@ def uniform_pair(phi, ids, shown, rng, tries: int = 200):
     return None
 
 
-def simulate_session(prior, phi, ids, similarity, strategy, rng, index=None, **session_kw):
-    """Une session simulée ; renvoie le profil final et le journal (paire, réponse)."""
+def simulate_session(prior, phi, ids, similarity, strategy, rng, index=None, profile=None,
+                     max_answers=MAX_ANSWERS, max_offers=MAX_OFFERS, **session_kw):
+    """Une session simulée ; renvoie le profil final et le journal (paire, réponse).
+
+    `profile` : profil de départ déjà construit (par exemple un mélange de personas) ;
+    par défaut, un `SessionProfile` qui part de `prior`.
+    """
     if strategy not in STRATEGIES:
         raise ValueError(f"strategy must be one of {STRATEGIES}")
     index = index or {item_id: i for i, item_id in enumerate(ids)}
-    profile = SessionProfile(prior, **session_kw)
+    profile = profile if profile is not None else SessionProfile(prior, **session_kw)
     offered, log = [], []
-    while not session_finished(profile.n_updates, len(offered)):
+    while not session_finished(profile.n_updates, len(offered), max_answers, max_offers):
         shown = {frozenset(p) for p in offered}
         pair = (next_pair(profile, phi, ids, offered, rng=rng) if strategy == "active"
                 else uniform_pair(phi, ids, shown, rng))

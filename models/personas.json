@@ -1,0 +1,706 @@
+{
+ "model": "personas_bradley_terry_phi",
+ "feature_names": [
+  "cat:atelier",
+  "cat:autre",
+  "cat:culture",
+  "cat:loisirs",
+  "cat:nature",
+  "cat:restauration",
+  "cat:spectacle",
+  "cat:sport",
+  "cat:vie_nocturne",
+  "cat:visite",
+  "price:free",
+  "price:conditional_free",
+  "price:paid",
+  "price:unknown",
+  "time:night",
+  "time:morning",
+  "time:afternoon",
+  "time:evening",
+  "zone:0-0",
+  "zone:0-1",
+  "zone:0-2",
+  "zone:1-0",
+  "zone:1-1",
+  "zone:1-2",
+  "zone:2-0",
+  "zone:2-1",
+  "zone:2-2",
+  "pop:log_visits"
+ ],
+ "centers": [
+  [
+   0.0,
+   0.02811701,
+   0.23479891,
+   0.04556815,
+   0.14227612,
+   0.58278179,
+   0.17506855,
+   0.06683232,
+   0.58294986,
+   0.20401258,
+   0.37190405,
+   0.15886426,
+   0.52900928,
+   0.68722791,
+   0.07493215,
+   0.26756061,
+   0.06243,
+   0.14926895,
+   0.81607675,
+   0.09343379,
+   0.08054599,
+   0.21548094,
+   0.04122626
+  ],
+  [
+   0.0,
+   0.03035375,
+   0.21922986,
+   0.02965573,
+   0.18574442,
+   0.68009869,
+   0.08013659,
+   0.13426599,
+   0.39793014,
+   0.26919704,
+   0.27019699,
+   0.25250907,
+   0.58516149,
+   0.6419372,
+   0.22306704,
+   0.14475136,
+   0.02620788,
+   0.61793374,
+   0.55864193,
+   0.02543139,
+   0.15414715,
+   0.13748934,
+   0.02037813
+  ],
+  [
+   0.0,
+   0.02491765,
+   0.35387517,
+   0.06742694,
+   0.23800099,
+   0.65104804,
+   0.10365688,
+   0.10388096,
+   0.2364855,
+   0.29910426,
+   0.08550478,
+   0.27772873,
+   0.67510341,
+   0.61927278,
+   0.06856782,
+   0.23840926,
+   0.03408009,
+   0.16722957,
+   0.60848102,
+   0.07129654,
+   0.14791488,
+   0.56341108,
+   0.04799097
+  ],
+  [
+   0.0,
+   0.01403932,
+   0.19275761,
+   0.07935225,
+   0.14604371,
+   0.71924592,
+   0.10752845,
+   0.1756134,
+   0.259592,
+   0.2579086,
+   0.10314737,
+   0.44406421,
+   0.67572002,
+   0.47930076,
+   0.59649452,
+   0.26640222,
+   0.02523111,
+   0.25689187,
+   0.44418451,
+   0.00472471,
+   0.15082086,
+   0.17969502,
+   0.02852694
+  ],
+  [
+   0.0,
+   0.02297938,
+   0.2886943,
+   0.03839814,
+   0.26273139,
+   0.52361755,
+   0.0899792,
+   0.07559822,
+   0.24742645,
+   0.51315931,
+   0.08415036,
+   0.42045517,
+   0.68013019,
+   0.48406783,
+   0.13626197,
+   0.21156886,
+   0.01957046,
+   0.26698873,
+   0.76971731,
+   0.07601447,
+   0.0868247,
+   0.15097514,
+   0.04127911
+  ],
+  [
+   0.0,
+   0.05587156,
+   0.29736928,
+   0.0706818,
+   0.15734758,
+   0.5881809,
+   0.27499541,
+   0.15190847,
+   0.40404867,
+   0.19827032,
+   0.15563894,
+   0.26573488,
+   0.5888762,
+   0.70222163,
+   0.12944395,
+   0.5139579,
+   0.08429463,
+   0.18024632,
+   0.60722523,
+   0.13625632,
+   0.14732652,
+   0.20807484,
+   0.03923173
+  ]
+ ],
+ "weights": [
+  [
+   0.0,
+   -0.24749548,
+   0.16074514,
+   -0.22256566,
+   -0.19910088,
+   -0.18879932,
+   0.16585902,
+   -0.08496139,
+   0.59446104,
+   0.02185753,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   -0.51831541,
+   0.05088289,
+   0.145515,
+   -0.33278232,
+   0.6101784,
+   0.13351929,
+   -0.33322921,
+   0.07031574,
+   0.17391564,
+   10.8354757
+  ],
+  [
+   0.0,
+   -0.25392095,
+   0.01546329,
+   -0.44802682,
+   0.11164101,
+   -0.05977682,
+   -0.1537773,
+   0.09321034,
+   0.27993257,
+   0.41525468,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.17295141,
+   -0.68054368,
+   -0.18431716,
+   1.40639953,
+   -0.07592764,
+   -0.439089,
+   0.198762,
+   -0.33842061,
+   -0.05981484,
+   9.67046417
+  ],
+  [
+   0.0,
+   -0.27788833,
+   0.66802117,
+   -0.31669129,
+   0.07127442,
+   -0.02942545,
+   -0.09544323,
+   -0.04161515,
+   -0.40903526,
+   0.43080312,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   -0.59122386,
+   -0.27275854,
+   -0.13107174,
+   -0.34668528,
+   0.22317361,
+   -0.24210021,
+   -0.04989741,
+   1.22182146,
+   0.18874199,
+   5.78983163
+  ],
+  [
+   0.0,
+   -0.47133624,
+   0.26590916,
+   -0.05372081,
+   -0.03317935,
+   -0.07498783,
+   0.26543303,
+   0.43519874,
+   -0.47985096,
+   0.14653427,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.56922134,
+   -0.16481616,
+   -0.28677274,
+   0.09179111,
+   -0.26424936,
+   -0.65771423,
+   0.17364865,
+   -0.29873074,
+   -0.16237788,
+   -2.59682153
+  ],
+  [
+   0.0,
+   -0.38479215,
+   0.18561154,
+   -0.25618361,
+   0.48276834,
+   -0.37665142,
+   -0.0674018,
+   0.03339373,
+   -0.69222632,
+   1.0754817,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   -0.36630385,
+   -0.10844152,
+   -0.22593326,
+   0.06955621,
+   0.70860067,
+   -0.04468804,
+   -0.23287911,
+   -0.15665778,
+   0.35674669,
+   3.3749351
+  ],
+  [
+   0.0,
+   -0.27778992,
+   0.43700824,
+   -0.03476923,
+   -0.17556709,
+   -0.56161877,
+   0.3826802,
+   0.40806737,
+   -0.26230787,
+   0.08429707,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   -0.32201902,
+   0.61526057,
+   0.18266232,
+   -0.41923375,
+   -0.1357691,
+   0.21668104,
+   0.08362286,
+   -0.22808939,
+   0.00688447,
+   7.38714203
+  ]
+ ],
+ "shares": [
+  0.19183673,
+  0.1244898,
+  0.15510204,
+  0.10816327,
+  0.20408163,
+  0.21632653
+ ],
+ "names": [
+  "Bars · le soir · centre",
+  "Restaurants · le soir · ouest",
+  "Culture · l'après-midi · centre",
+  "Restaurants · l'après-midi · nord-ouest",
+  "Visites & Nature · l'après-midi · centre",
+  "Concerts & Culture · le soir · centre"
+ ],
+ "descriptions": [
+  "Se distingue par : Bars et vie nocturne (plus fréquent que chez l'ensemble des utilisateurs). Visites : Bars et vie nocturne 41%, Restaurants, cafés et dégustations 41%, Culture, musées, cinéma et lecture 7%. Surtout le soir (52% des visites), zone la plus fréquentée : centre (80%).",
+  "Se distingue par : Restaurants, cafés et dégustations (plus fréquent que chez l'ensemble des utilisateurs). Visites : Restaurants, cafés et dégustations 58%, Bars et vie nocturne 20%, Visites et patrimoine 9%. Surtout le soir (46% des visites), zone la plus fréquentée : ouest (47%).",
+  "Se distingue par : Culture, musées, cinéma et lecture (plus fréquent que chez l'ensemble des utilisateurs). Visites : Restaurants, cafés et dégustations 54%, Culture, musées, cinéma et lecture 16%, Visites et patrimoine 12%. Surtout l'après-midi (49% des visites), zone la plus fréquentée : centre (46%).",
+  "Se distingue par : Restaurants, cafés et dégustations (plus fréquent que chez l'ensemble des utilisateurs). Visites : Restaurants, cafés et dégustations 68%, Bars et vie nocturne 9%, Visites et patrimoine 9%. Surtout l'après-midi (51% des visites), zone la plus fréquentée : nord-ouest (48%).",
+  "Se distingue par : Visites et patrimoine, Nature et plein air (plus fréquent que chez l'ensemble des utilisateurs). Visites : Restaurants, cafés et dégustations 36%, Visites et patrimoine 34%, Culture, musées, cinéma et lecture 11%. Surtout l'après-midi (53% des visites), zone la plus fréquentée : centre (77%).",
+  "Se distingue par : Concerts et spectacles, Culture, musées, cinéma et lecture (plus fréquent que chez l'ensemble des utilisateurs). Visites : Restaurants, cafés et dégustations 45%, Bars et vie nocturne 21%, Culture, musées, cinéma et lecture 12%. Surtout le soir (53% des visites), zone la plus fréquentée : centre (48%)."
+ ],
+ "temperature": 0.5,
+ "beta": 3.0,
+ "created_utc": "2026-11-26T17:17:54Z",
+ "k": 6,
+ "lambda": 0.01,
+ "pop_scale": 16,
+ "trained_blocks": [
+  "cat",
+  "price",
+  "zone",
+  "pop"
+ ],
+ "users_per_persona": [
+  94,
+  61,
+  76,
+  53,
+  100,
+  106
+ ],
+ "selection": {
+  "criterion": "loss of val pairs after the known history (users assigned by that history)",
+  "global_prior": {
+   "val_loss": 0.6746517925862761,
+   "val_accuracy": 0.5696502667457024,
+   "val_pairs": 5061,
+   "val_ndcg10": 0.09767253708517709
+  },
+  "chosen": {
+   "val_loss": 0.6402957399951781
+  },
+  "search": [
+   {
+    "k": 2,
+    "lambda": 0.001,
+    "val_loss": 0.6714576924007952,
+    "val_accuracy": 0.5915826911677534,
+    "sizes": [
+     251,
+     239
+    ]
+   },
+   {
+    "k": 2,
+    "lambda": 0.01,
+    "val_loss": 0.6677114432100524,
+    "val_accuracy": 0.5903971547125074,
+    "sizes": [
+     251,
+     239
+    ]
+   },
+   {
+    "k": 2,
+    "lambda": 0.1,
+    "val_loss": 0.6681885934138764,
+    "val_accuracy": 0.5874333135743924,
+    "sizes": [
+     251,
+     239
+    ]
+   },
+   {
+    "k": 2,
+    "lambda": 1.0,
+    "val_loss": 0.67332228759465,
+    "val_accuracy": 0.5714285714285714,
+    "sizes": [
+     251,
+     239
+    ]
+   },
+   {
+    "k": 3,
+    "lambda": 0.001,
+    "val_loss": 0.6576592540727896,
+    "val_accuracy": 0.6067970756767437,
+    "sizes": [
+     113,
+     154,
+     223
+    ]
+   },
+   {
+    "k": 3,
+    "lambda": 0.01,
+    "val_loss": 0.652900866633497,
+    "val_accuracy": 0.6139102944082196,
+    "sizes": [
+     113,
+     154,
+     223
+    ]
+   },
+   {
+    "k": 3,
+    "lambda": 0.1,
+    "val_loss": 0.6594248775134829,
+    "val_accuracy": 0.601264572218929,
+    "sizes": [
+     113,
+     154,
+     223
+    ]
+   },
+   {
+    "k": 3,
+    "lambda": 1.0,
+    "val_loss": 0.6716389204336626,
+    "val_accuracy": 0.576368306658763,
+    "sizes": [
+     113,
+     154,
+     223
+    ]
+   },
+   {
+    "k": 4,
+    "lambda": 0.001,
+    "val_loss": 0.6698429726003302,
+    "val_accuracy": 0.5969176052163604,
+    "sizes": [
+     118,
+     165,
+     102,
+     105
+    ]
+   },
+   {
+    "k": 4,
+    "lambda": 0.01,
+    "val_loss": 0.6615510341107864,
+    "val_accuracy": 0.5959296581703221,
+    "sizes": [
+     118,
+     165,
+     102,
+     105
+    ]
+   },
+   {
+    "k": 4,
+    "lambda": 0.1,
+    "val_loss": 0.6614678508557857,
+    "val_accuracy": 0.5868405453467694,
+    "sizes": [
+     118,
+     165,
+     102,
+     105
+    ]
+   },
+   {
+    "k": 4,
+    "lambda": 1.0,
+    "val_loss": 0.6716370202608645,
+    "val_accuracy": 0.5732068761114404,
+    "sizes": [
+     118,
+     165,
+     102,
+     105
+    ]
+   },
+   {
+    "k": 6,
+    "lambda": 0.001,
+    "val_loss": 0.6499479938980983,
+    "val_accuracy": 0.6247777119146414,
+    "sizes": [
+     94,
+     61,
+     76,
+     53,
+     100,
+     106
+    ]
+   },
+   {
+    "k": 6,
+    "lambda": 0.01,
+    "val_loss": 0.6402957399951781,
+    "val_accuracy": 0.6295198577356254,
+    "sizes": [
+     94,
+     61,
+     76,
+     53,
+     100,
+     106
+    ]
+   },
+   {
+    "k": 6,
+    "lambda": 0.1,
+    "val_loss": 0.6467420206328296,
+    "val_accuracy": 0.6150958308634656,
+    "sizes": [
+     94,
+     61,
+     76,
+     53,
+     100,
+     106
+    ]
+   },
+   {
+    "k": 6,
+    "lambda": 1.0,
+    "val_loss": 0.668181474217652,
+    "val_accuracy": 0.5809128630705394,
+    "sizes": [
+     94,
+     61,
+     76,
+     53,
+     100,
+     106
+    ]
+   },
+   {
+    "k": 8,
+    "lambda": 0.001,
+    "val_loss": 0.6529259628665516,
+    "val_accuracy": 0.6194427978660344,
+    "sizes": [
+     43,
+     66,
+     24,
+     84,
+     64,
+     47,
+     68,
+     94
+    ]
+   },
+   {
+    "k": 8,
+    "lambda": 0.01,
+    "val_loss": 0.6430527492987382,
+    "val_accuracy": 0.6247777119146414,
+    "sizes": [
+     43,
+     66,
+     24,
+     84,
+     64,
+     47,
+     68,
+     94
+    ]
+   },
+   {
+    "k": 8,
+    "lambda": 0.1,
+    "val_loss": 0.646029656252602,
+    "val_accuracy": 0.6188500296384114,
+    "sizes": [
+     43,
+     66,
+     24,
+     84,
+     64,
+     47,
+     68,
+     94
+    ]
+   },
+   {
+    "k": 8,
+    "lambda": 1.0,
+    "val_loss": 0.6674749981562218,
+    "val_accuracy": 0.582888757162616,
+    "sizes": [
+     43,
+     66,
+     24,
+     84,
+     64,
+     47,
+     68,
+     94
+    ]
+   }
+  ],
+  "pop_scale_search": [
+   {
+    "pop_scale": 1,
+    "val_ndcg10": 0.0584184616921052
+   },
+   {
+    "pop_scale": 2,
+    "val_ndcg10": 0.06374244759589939
+   },
+   {
+    "pop_scale": 4,
+    "val_ndcg10": 0.0761675239773312
+   },
+   {
+    "pop_scale": 8,
+    "val_ndcg10": 0.09379161077009426
+   },
+   {
+    "pop_scale": 16,
+    "val_ndcg10": 0.10097023042742569
+   }
+  ]
+ },
+ "inputs": {
+  "data_version": "common-2f8e1b3a68d638ee",
+  "pairs_sha256": "1caac1713c7e21ce27e5dd8874c1dda6b5ca1fea45c3157ae14810afd9a2067b",
+  "prior_sha256": "ac6b83d689f5e396abecd286a438b9e4e204fe49a8233ea0b295de475e1a51bd",
+  "train_users": 490
+ },
+ "note": "Test users are never read. Habits and popularity use training users' visits only."
+}
