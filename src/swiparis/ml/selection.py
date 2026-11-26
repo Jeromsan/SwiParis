@@ -83,8 +83,12 @@ def _pool(scores: np.ndarray, size: int, rng: np.random.Generator) -> np.ndarray
     return np.sort(np.concatenate([top, explore]))
 
 
-def _best_pair(profile, phi, ids, candidates, shown, beta):
+def _best_pair(profile, phi, ids, candidates, shown, beta,
+               preference_scores=None, preference_weight=0.0):
     values = acquisition_matrix(profile, phi[candidates], beta)
+    if preference_scores is not None and preference_weight:
+        preference = preference_scores[candidates]
+        values += preference_weight * (preference[:, None] + preference[None, :]) / 2
     for flat in np.argsort(-values, axis=None, kind="stable"):
         a, b = divmod(int(flat), len(candidates))
         if not np.isfinite(values[a, b]):
@@ -98,7 +102,9 @@ def _best_pair(profile, phi, ids, candidates, shown, beta):
 
 def next_pair(profile: SessionProfile, phi, ids: Sequence[str],
               shown_pairs: Iterable[Iterable[str]] = (), beta: float = 0.5,
-              pool_size: int = 40, rng=None) -> tuple[str, str] | None:
+              pool_size: int = 40, rng=None,
+              preference_scores=None, anchor_ids: Iterable[str] = (),
+              preference_weight: float = 0.75) -> tuple[str, str] | None:
     """Prochaine paire à montrer, ou None s'il ne reste aucune paire informative.
 
     La recherche se fait dans un pool de `pool_size` activités (coût en pool_size²).
@@ -115,10 +121,23 @@ def next_pair(profile: SessionProfile, phi, ids: Sequence[str],
         raise ValueError("pool_size must be at least 2")
     rng = np.random.default_rng(rng)
     shown = {frozenset(pair) for pair in shown_pairs}
-    pool = _pool(profile.scores(phi), pool_size, rng)
-    found = _best_pair(profile, phi, ids, pool, shown, beta)
+    if preference_scores is None:
+        preference = np.zeros(len(ids), dtype=float)
+    else:
+        preference = np.asarray(preference_scores, dtype=float)
+        if preference.shape != (len(ids),) or not np.isfinite(preference).all():
+            raise ValueError("preference_scores must be one finite value per item")
+    if preference_weight < 0:
+        raise ValueError("preference_weight must be non-negative")
+    pool = _pool(profile.scores(phi) + preference_weight * preference, pool_size, rng)
+    anchors = set(anchor_ids)
+    anchor_indices = [i for i, item_id in enumerate(ids) if item_id in anchors]
+    if anchor_indices:
+        pool = np.unique(np.concatenate([pool, np.asarray(anchor_indices, dtype=int)]))
+    found = _best_pair(profile, phi, ids, pool, shown, beta, preference, preference_weight)
     if found is None and len(pool) < len(ids):
-        found = _best_pair(profile, phi, ids, np.arange(len(ids)), shown, beta)
+        found = _best_pair(profile, phi, ids, np.arange(len(ids)), shown, beta,
+                           preference, preference_weight)
     if found is None:
         return None
     return ids[found[0]], ids[found[1]]
@@ -150,11 +169,13 @@ def mmr_rerank(scores, phi, k: int, diversity: float = 0.3) -> list[int]:
 
 
 def rank(profile: SessionProfile, phi, ids: Sequence[str], k: int = 10,
-         diversity: float = 0.3, exclude: Iterable[str] = ()) -> list[tuple[str, float]]:
+         diversity: float = 0.3, exclude: Iterable[str] = (),
+         preference_scores=None, preference_weight: float = 1.0) -> list[tuple[str, float]]:
     """Top-k (identifiant, score du profil), après re-ranking pour la diversité.
 
-    `exclude` : activités à ne pas recommander, en pratique toutes celles déjà
-    proposées en comparaison pendant la session (exigé par le journal).
+    `exclude` : activités à ne pas recommander, en pratique celles explicitement
+    rejetées. `preference_scores` doit correspondre aux identifiants qui restent
+    après exclusion.
     """
     phi = np.asarray(phi, dtype=float)
     ids = list(ids)
@@ -164,6 +185,11 @@ def rank(profile: SessionProfile, phi, ids: Sequence[str], k: int = 10,
     keep = [i for i, item_id in enumerate(ids) if item_id not in excluded]
     phi, ids = phi[keep], [ids[i] for i in keep]
     scores = profile.scores(phi)
+    if preference_scores is not None:
+        preference = np.asarray(preference_scores, dtype=float)
+        if preference.shape != (len(ids),) or not np.isfinite(preference).all():
+            raise ValueError("preference_scores must match the non-excluded items")
+        scores = scores + preference_weight * preference
     return [(ids[i], float(scores[i])) for i in mmr_rerank(scores, phi, k, diversity)]
 
 

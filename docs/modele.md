@@ -59,18 +59,23 @@ publiés. La démo interactive utilise 10 réponses/15 offres, avec la mise à j
 SGD actuelle (η = 0,5, λ = 0,05). Les choix sont rejoués depuis le journal à
 chaque requête. Les sorties choisies restent éligibles au classement final et
 les sorties rejetées sont écartées. Cette politique est identifiée par le
-suffixe `session-v2` dans la version exposée par l'API.
+suffixe `session-v3` dans la version exposée par l'API. Un score de préférence
+complémentaire combine les catégories plébiscitées/écartées et la similarité
+des caractéristiques avec les sorties choisies, avec une importance qui
+décroît avec leur ancienneté.
 
 ## Choix des paires et classement
 
-A(i, j) = H(P(i ≻ j)) + β(1 − cos(φ(i), φ(j))), dans un pool de candidats
-(moitié les mieux classées, moitié échantillonnée). La bibliothèque utilise un
-pool de 40 par défaut ; l'API sert 80 candidats avec un tirage reproductible
-pour la séance.
-Les paires déjà montrées et les vecteurs identiques sont exclus. Le côté
+A(i, j) = H(P(i ≻ j)) + β(1 − cos(φ(i), φ(j))) + un bonus de préférence,
+dans un pool de candidats (moitié les mieux classées, moitié échantillonnée).
+Les sorties choisies sont ajoutées comme ancres à ce pool. Une comparaison sur
+quatre peut opposer deux sorties déjà choisies. La bibliothèque utilise un pool
+de 40 par défaut ; l'API sert 80 candidats avec un tirage reproductible pour la
+séance. Les paires déjà montrées et les vecteurs identiques sont exclus. Le côté
 gauche/droite est tiré par le journal (`LogStore.offer_comparison`).
 
-Classement : score wᵀφ(i), puis re-ranking MMR (`diversity`). Les activités
+Classement : score wᵀφ(i) combiné au score de préférence récent, puis re-ranking
+MMR (`diversity`). Les trois premiers résultats sont affichés. Les activités
 explicitement rejetées sont écartées ; celles choisies restent éligibles et sont
 signalées dans les résultats. Le formulaire propose toute la journée par défaut,
 ou un moment de la journée / un horaire précis, et vérifie qu'au moins six

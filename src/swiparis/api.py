@@ -36,7 +36,7 @@ SESSION_MAX_ANSWERS = 10
 SESSION_MAX_OFFERS = 15
 SESSION_ETA = 0.5
 SESSION_LAMBDA = 0.05
-SESSION_POLICY_VERSION = "session-v2"
+SESSION_POLICY_VERSION = "session-v3"
 
 
 class SessionPayload(BaseModel):
@@ -201,6 +201,7 @@ def create_app(catalog_path: str | Path | None = None,
         shown = [(row["left_item_id"], row["right_item_id"]) for row in comparisons]
         selected_items: set[str] = set()
         rejected_items: set[str] = set()
+        preference_history: list[tuple[str, str]] = []
         for row in comparisons:
             if row["choice"] == "skip":
                 continue
@@ -208,9 +209,44 @@ def create_app(catalog_path: str | Path | None = None,
             rejected = row["right_item_id"] if row["choice"] == "left" else row["left_item_id"]
             selected_items.add(chosen)
             rejected_items.add(rejected)
+            preference_history.append((chosen, rejected))
             if chosen in index and rejected in index:
                 profile.update(phi[index[chosen]], phi[index[rejected]])
-        return rows, ids, phi, profile, shown, len(comparisons), selected_items, rejected_items
+        return (rows, ids, phi, profile, shown, len(comparisons), selected_items,
+                rejected_items, preference_history)
+
+    def preference_scores(ids: list[str], phi: np.ndarray, history: list[tuple[str, str]],
+                          feature_space: FeatureSpace, history_ids: list[str],
+                          history_phi: np.ndarray) -> np.ndarray:
+        """Blend decayed like/dislike evidence with similarity to liked outings."""
+        if not history or not len(ids):
+            return np.zeros(len(ids), dtype=float)
+        index = {item_id: pos for pos, item_id in enumerate(history_ids)}
+        cat = feature_space.blocks["cat"]
+        cat_evidence = np.zeros(cat.stop - cat.start, dtype=float)
+        total_weight = 0.0
+        liked_rows, liked_weights = [], []
+        for age, (chosen, rejected) in enumerate(reversed(history)):
+            weight = 0.78 ** age
+            total_weight += weight
+            if chosen in index:
+                liked_rows.append(history_phi[index[chosen]])
+                liked_weights.append(weight)
+                cat_evidence += weight * history_phi[index[chosen], cat]
+            if rejected in index:
+                cat_evidence -= 0.8 * weight * history_phi[index[rejected], cat]
+        category_fit = phi[:, cat] @ cat_evidence / max(total_weight, 1e-12)
+        if not liked_rows:
+            return category_fit
+        candidate_norms = np.linalg.norm(phi, axis=1, keepdims=True)
+        candidate_unit = np.divide(phi, candidate_norms, out=np.zeros_like(phi), where=candidate_norms > 0)
+        liked = np.asarray(liked_rows, dtype=float)
+        liked_norms = np.linalg.norm(liked, axis=1, keepdims=True)
+        liked_unit = np.divide(liked, liked_norms, out=np.zeros_like(liked), where=liked_norms > 0)
+        similarities = np.clip(candidate_unit @ liked_unit.T, 0, 1)
+        recency = np.asarray(liked_weights, dtype=float)
+        similarity_fit = np.max(similarities * recency[None, :], axis=1)
+        return category_fit + similarity_fit
 
     @app.get("/health")
     def health(request: Request):
@@ -260,19 +296,36 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            rows, ids, phi, profile, shown, offered, _selected_items, _rejected_items = session_state(
+            (rows, ids, phi, profile, shown, offered, selected_items, rejected_items,
+             history) = session_state(
                 logs, session_id, catalog, feature_space, prior, constraints)
             if profile.n_updates >= SESSION_MAX_ANSWERS or offered >= SESSION_MAX_OFFERS:
                 return {"comparison": None, "done": True,
                         "stop_reason": "max_answers" if profile.n_updates >= SESSION_MAX_ANSWERS else "max_offers",
                         "answers": profile.n_updates, "offers": offered, "eligible_count": len(ids)}
-            pair_indices = [i for i, item_id in enumerate(ids) if item_id not in _rejected_items]
+            pair_indices = [i for i, item_id in enumerate(ids) if item_id not in rejected_items]
             pair_ids = [ids[i] for i in pair_indices]
             pair_phi = phi[pair_indices]
+            pair_preferences = preference_scores(pair_ids, pair_phi, history, feature_space, ids, phi)
+            liked_ids = [chosen for chosen, _ in history if chosen in pair_ids]
             seed_material = f"{session_id}:{offered}".encode("utf-8")
             pair_seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
-            chosen_pair = next_pair(profile, pair_phi, pair_ids, shown_pairs=shown,
-                                    pool_size=80, rng=pair_seed)
+            chosen_pair = None
+            # Every fourth offer can compare two earlier winners, giving the
+            # model direct evidence about their relative order.
+            liked_ids = list(dict.fromkeys(liked_ids))
+            if offered >= 3 and offered % 4 == 3 and len(liked_ids) >= 2:
+                liked_set = set(liked_ids)
+                favorite_indices = [i for i, item_id in enumerate(pair_ids) if item_id in liked_set]
+                chosen_pair = next_pair(
+                    profile, pair_phi[favorite_indices], [pair_ids[i] for i in favorite_indices],
+                    shown_pairs=shown, pool_size=max(2, len(favorite_indices)), rng=pair_seed,
+                )
+            if chosen_pair is None:
+                chosen_pair = next_pair(
+                    profile, pair_phi, pair_ids, shown_pairs=shown, pool_size=80,
+                    rng=pair_seed, preference_scores=pair_preferences, anchor_ids=liked_ids,
+                )
             if chosen_pair is None:
                 return {"comparison": None, "done": True, "stop_reason": "no_informative_pair",
                         "answers": profile.n_updates, "offers": offered, "eligible_count": len(pair_ids)}
@@ -334,7 +387,8 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            rows, ids, phi, profile, shown, offered, selected_items, rejected_items = session_state(
+            (rows, ids, phi, profile, shown, offered, selected_items, rejected_items,
+             history) = session_state(
                 logs, payload.session_id, catalog, feature_space, prior, constraints)
             keep = [i for i, item_id in enumerate(ids) if item_id not in rejected_items]
             if not keep:
@@ -342,7 +396,10 @@ def create_app(catalog_path: str | Path | None = None,
                         "model_version": request.app.state.model_version, "impressions": []}
             eligible_ids = [ids[i] for i in keep]
             eligible_phi = phi[keep]
-            ranked = rank(profile, eligible_phi, eligible_ids, k=10, diversity=0.3)
+            eligible_preferences = preference_scores(
+                eligible_ids, eligible_phi, history, feature_space, ids, phi)
+            ranked = rank(profile, eligible_phi, eligible_ids, k=3, diversity=0.3,
+                          preference_scores=eligible_preferences, preference_weight=1.0)
             item_map = {row["item_id"]: row for row in rows}
             item_ids = [item_id for item_id, _ in ranked]
             shown_result = logs.show_recommendations({"event_id": payload.event_id,

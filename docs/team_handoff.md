@@ -153,10 +153,13 @@ swiparis-streamlit
 Ouvrir http://localhost:8501. Le serveur API écoute seulement sur
 `127.0.0.1:8000`. Le parcours demande un consentement explicite avant de créer
 une session pilote, filtre les annonces Paris Data par créneau, arrondissement,
-catégorie et budget, propose les comparaisons, puis affiche jusqu'à dix
-recommandations et leur carte. Un prix inconnu ne satisfait jamais un filtre de
-budget. La clé Google est lue dans l'environnement et n'est ni stockée ni
-envoyée au catalogue ; sans clé, la liste reste disponible.
+catégorie et budget, propose les comparaisons, puis affiche les trois meilleures
+recommandations et leur carte. Les réponses précédentes influencent la sélection
+des comparaisons et le classement final ; une comparaison sur quatre peut
+départager deux sorties déjà choisies. Un prix inconnu ne satisfait jamais un
+filtre de budget. La clé Google est lue dans l'environnement et n'est ni stockée
+ni envoyée au catalogue ; sans clé, la carte utilise OpenStreetMap et propose un
+lien Google Maps sur chaque repère.
 
 `GET /next_pair?session_id=...` calcule la prochaine paire sans écrire dans la
 base. Le front-end l'enregistre ensuite via `POST /api/comparisons` avec un
