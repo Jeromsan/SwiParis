@@ -2,6 +2,8 @@
 
 Application interactive de recommandation de sorties et loisirs à Paris. En dix choix entre paires d'activités, SwiParis adapte les comparaisons aux sorties déjà choisies et à leurs ressemblances, puis affiche les trois meilleures recommandations sous contraintes de disponibilité, d'arrondissement et de budget. La disponibilité par défaut couvre toute la journée pour permettre un vrai choix parmi les sorties annoncées.
 
+> **Reprise de la branche `feature/personas-merwane`** : tout ce qui a changé (personas, « Ma sélection », correctifs, η, tests) et comment continuer est expliqué dans [docs/CHANGEMENTS_PERSONAS.md](docs/CHANGEMENTS_PERSONAS.md).
+
 ## Équipe
 
 | Membre | Rôle | Responsabilités principales |
