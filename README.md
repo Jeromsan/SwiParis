@@ -39,6 +39,15 @@ Dans une deuxième fenêtre, lancer l'interface :
 .\.venv\Scripts\python.exe -m streamlit run src/swiparis/streamlit_app.py
 ```
 
+Sur macOS ou Linux, les mêmes étapes dans un terminal :
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[systems,ml]"
+.venv/bin/python -m uvicorn swiparis.api:app --host 127.0.0.1 --port 8000      # fenêtre 1
+.venv/bin/python -m streamlit run src/swiparis/streamlit_app.py                # fenêtre 2
+```
+
 Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, filtre les annonces Paris Data, journalise les comparaisons dans une base SQLite séparée et affiche les recommandations et la carte. Sans clé Google Maps, les fiches et liens source restent accessibles. Pour afficher la carte, fournir une clé navigateur restreinte via la variable d'environnement `GOOGLE_MAPS_API_KEY`.
 
 L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version dans `/health`. Si aucun prior versionné n'est présent, elle utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
