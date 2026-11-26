@@ -202,6 +202,11 @@ d'origine (global, η = 0,5) +0,052 [+0,033 ; +0,072], Hit@3 +0,099 [+0,031 ; +0
   choisir η ni de prouver un gain des personas **pour l'application**. Le « problème de
   η = 0,5 » signalé avant venait de là.
 
+Départage en faveur des sorties choisies (`policy.CHOSEN_TIEBREAK`, ajouté après ces
+mesures) : à score égal, une sortie choisie pendant la séance passe devant ses « jumelles »
+(jusqu'à 30 annonces ont exactement le même φ). Effet sur le NDCG@10 de validation : moins
+de 0,001 (global η = 0,5 : 0,030 → 0,030 ; personas η = 0,5 : 0,076 → 0,076).
+
 Décision dans le code : η = 0,5 (choix d'Amine, celui qui personnalise le plus), réglable
 sans toucher au code avec `SWIPARIS_SESSION_ETA` ; personas activées (`SWIPARIS_PERSONAS`,
 `off` pour les retirer), présentées comme une explication des choix, sans gain de précision

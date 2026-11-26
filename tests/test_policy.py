@@ -40,6 +40,23 @@ class EtaArmsTest(unittest.TestCase):
         self.assertIsNone(policy.eta_from_version("prior-x+session-v3", "s"))
 
 
+class ChosenTiebreakTest(unittest.TestCase):
+    def test_a_chosen_outing_beats_its_identical_twins(self):
+        from swiparis.ml.model import SessionProfile
+        space = FeatureSpace(("culture", "spectacle"), grid=(1, 1))
+        twins = [Item(f"expo{n}", ("culture",), "free", 48.85, 2.35, None) for n in range(30)]
+        others = [Item("concert", ("spectacle",), "paid", 48.85, 2.35, None)]
+        items = twins + others
+        ids, phi = [i.item_id for i in items], space.encode_many(items)
+        history = [("expo17", "concert")] * 4  # l'exposition 17 choisie 4 fois
+        profile = SessionProfile(np.zeros(space.dim))
+        for _ in history:
+            profile.update(phi[17], phi[30])
+        for seed in range(20):  # quel que soit le tirage des égalités
+            top = policy.recommend(profile, ids, phi, history, {"concert"}, space, seed, k=3)
+            self.assertEqual(top[0][0], "expo17")
+
+
 class HabitFromItemsTest(unittest.TestCase):
     def test_habits_follow_the_categories_times_and_zones_of_the_items(self):
         space = FeatureSpace(("culture", "spectacle"), grid=(1, 2))

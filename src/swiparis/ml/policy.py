@@ -12,6 +12,7 @@ fait l'application :
 """
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import os
 from typing import Iterable, Sequence
@@ -157,20 +158,30 @@ def choose_pair(profile, ids: Sequence[str], phi: np.ndarray, shown, offered: in
     return chosen_pair, len(pair_ids)
 
 
+# Départage en faveur des sorties choisies : beaucoup d'annonces ont exactement le même φ
+# (ex. 30 expositions gratuites du même quartier), donc le même score. Sans ce départage,
+# une sortie choisie 4 fois pouvait être remplacée par une « jumelle » tirée au hasard,
+# puis écartée par le MMR. Le bonus est assez petit pour ne départager que les égalités.
+CHOSEN_TIEBREAK = 1e-6
+
+
 def recommend(profile, ids: Sequence[str], phi: np.ndarray, history, rejected, space,
               rank_seed: int, k: int = RECOMMENDATIONS, pool: int | None = None) -> list[tuple[str, float]]:
     """Top-k sans les sorties rejetées : score du profil + préférence, puis MMR.
 
-    Les égalités de score sont départagées au hasard (graine de la séance) : beaucoup
-    d'annonces ont le même φ. `pool` (simulation sur un grand catalogue) limite le MMR aux
+    Les égalités de score sont départagées d'abord en faveur des sorties choisies pendant
+    la séance (plus elles ont été choisies, plus elles passent devant), puis au hasard
+    (graine de la séance). `pool` (simulation sur un grand catalogue) limite le MMR aux
     `pool` meilleures activités ; l'API classe toutes les activités éligibles.
     """
     keep = [i for i, item_id in enumerate(ids) if item_id not in rejected]
     if not keep:
         return []
     kept_ids, kept_phi = [ids[i] for i in keep], phi[keep]
+    chosen = Counter(item for item, _ in history)
     scores = profile.scores(kept_phi) + PREFERENCE_WEIGHT * preference_scores(
         kept_ids, kept_phi, history, space, ids, phi)
+    scores = scores + CHOSEN_TIEBREAK * np.array([chosen.get(item, 0) for item in kept_ids], dtype=float)
     order = np.random.default_rng(rank_seed).permutation(len(kept_ids))
     if pool is not None and len(order) > pool:
         order = order[np.argsort(-scores[order], kind="stable")[:pool]]
