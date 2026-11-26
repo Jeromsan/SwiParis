@@ -2,8 +2,6 @@
 
 Système de recommandation de sorties et de loisirs à Paris. L'utilisateur indique ses disponibilités, son arrondissement et son budget, puis choisit entre des paires d'activités. L'application adapte les comparaisons et propose trois sorties correspondant à ses préférences.
 
-> **Branche `feature/personas-merwane`** : tout ce qui a changé (personas, « Ma sélection », correctifs, η, tests) et comment continuer est expliqué dans [docs/CHANGEMENTS_PERSONAS.md](docs/CHANGEMENTS_PERSONAS.md).
-
 ## Membres du groupe
 
 | Membre | Rôle |
@@ -74,13 +72,11 @@ Installer les dépendances des modules d'entraînement, puis lancer les tests :
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ~~~
 
-Vérifier le parcours complet avec la vraie base et le modèle enregistré :
+Vérifier aussi le parcours complet avec la base et le modèle enregistrés :
 
 ~~~powershell
 .\.venv\Scripts\python.exe scripts/check_api_e2e.py --catalog data/processed/common.sqlite --models-dir models
 ~~~
-
-Ce parcours teste la création d'une séance, dix comparaisons, les recommandations et leur journalisation. Avec l'API lancée, `scripts/check_ui_flow.py` teste l'interface comme un utilisateur (48 vérifications). Le réentraînement est décrit dans [le pipeline ML](docs/ml_pipeline.md) et le chargement du modèle dans [le guide du serving](docs/serving.md).
 
 ## Sélection, personas et réglages
 
@@ -97,7 +93,7 @@ SwiParis/
 ├── config/                 # Taxonomie commune
 ├── data/processed/         # Base commune, paires et découpage (versionnés)
 ├── data/pilot/             # Journal du pilote, local et non versionné
-├── docs/                   # Données, modèle, évaluation, personas (CHANGEMENTS_PERSONAS.md : passation)
+├── docs/                   # Données, modèle, évaluation et personas
 ├── models/                 # Prior entraîné et personas, versionnés
 ├── scripts/                # Vérification du parcours API
 ├── src/swiparis/
