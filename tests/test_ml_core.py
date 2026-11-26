@@ -191,6 +191,14 @@ class SelectionTest(unittest.TestCase):
             found = next_pair(profile, PHI[:4], ids, shown_pairs=shown, pool_size=2, rng=seed)
             self.assertEqual(set(found), remaining)
 
+    def test_next_pair_keeps_a_previous_favorite_in_the_comparison_pool(self):
+        profile = SessionProfile(np.zeros(SPACE.dim))
+        preference = np.zeros(len(IDS))
+        preference[IDS.index("louvre")] = 10
+        pair = next_pair(profile, PHI, IDS, preference_scores=preference,
+                         anchor_ids=["louvre"], pool_size=2, rng=0)
+        self.assertIn("louvre", pair)
+
     def test_mmr(self):
         self.assertEqual(mmr_rerank([.2, .9, .5], np.eye(3), k=3, diversity=0), [1, 2, 0])
         phi = np.array([[1, 0], [1, .01], [1, .02], [0, 1]])
@@ -222,6 +230,14 @@ class SelectionTest(unittest.TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0][0], "parc")
         self.assertAlmostEqual(result[0][1], float(profile.scores(phi_of("parc"))))
+
+    def test_rank_uses_recent_preference_scores(self):
+        profile = SessionProfile(np.zeros(SPACE.dim))
+        preference = np.zeros(len(IDS))
+        preference[IDS.index("foot")] = 2
+        result = rank(profile, PHI, IDS, k=1, diversity=0,
+                      preference_scores=preference)
+        self.assertEqual(result[0][0], "foot")
 
 
 class CommonItemsTest(unittest.TestCase):

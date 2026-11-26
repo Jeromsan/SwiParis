@@ -118,11 +118,20 @@ class TeamDataTest(unittest.TestCase):
             self.store.answer(dict(answer, event_id="another-answer", choice="left"))
         with self.assertRaises(Conflict):
             self.store.answer(dict(answer, choice="right"))
+        pair = self.store.offer_comparison(dict(event_id="pair-2", session_id=sid,
+                                                item_a=self.ids[2], item_b=self.ids[3]))
+        selected = self.store.answer(dict(event_id="answer-2", session_id=sid,
+                                          comparison_id=pair["comparison_id"], choice="left"))
+        self.assertEqual(selected["chosen_item_id"], pair["left_item_id"])
+        shown = self.store.show_recommendations(dict(event_id="selected-is-recommended", session_id=sid,
+                                                     item_ids=[pair["left_item_id"]]))
+        self.assertEqual(shown["impressions"][0]["item_id"], pair["left_item_id"])
         with self.assertRaises(ValueError):
-            self.store.show_recommendations(dict(event_id="seen", session_id=sid, item_ids=[self.ids[0]]))
+            self.store.show_recommendations(dict(event_id="rejected-is-not-recommended", session_id=sid,
+                                                 item_ids=[pair["right_item_id"]]))
         with closing(self.store.connect()) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM comparisons WHERE choice='skip'").fetchone()[0], 1)
-            self.assertEqual(db.execute("SELECT count(*) FROM recommendations_shown").fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) FROM recommendations_shown").fetchone()[0], 1)
 
     def test_impression_actions_session_ownership(self):
         sid = self.session()

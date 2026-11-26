@@ -142,7 +142,7 @@ class ServingModel:
         """Top-k (identifiant, score), après re-ranking pour la diversité.
 
         phi, ids : activités ÉLIGIBLES (contraintes déjà appliquées). answers : réponses de la session.
-        exclude : activités à ne pas recommander (celles déjà montrées en comparaison).
+        exclude : activités à ne pas recommander (par exemple les sorties explicitement rejetées).
         """
         phi = self._check(phi, ids)
         profile = profile or self.profile_from(phi, ids, answers, **options)

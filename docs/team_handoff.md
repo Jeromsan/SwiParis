@@ -153,10 +153,13 @@ swiparis-streamlit
 Ouvrir http://localhost:8501. Le serveur API écoute seulement sur
 `127.0.0.1:8000`. Le parcours demande un consentement explicite avant de créer
 une session pilote, filtre les annonces Paris Data par créneau, arrondissement,
-catégorie et budget, propose les comparaisons, puis affiche jusqu'à dix
-recommandations et leur carte. Un prix inconnu ne satisfait jamais un filtre de
-budget. La clé Google est lue dans l'environnement et n'est ni stockée ni
-envoyée au catalogue ; sans clé, la liste reste disponible.
+catégorie et budget, propose les comparaisons, puis affiche les trois meilleures
+recommandations et leur carte. Les réponses précédentes influencent la sélection
+des comparaisons et le classement final ; une comparaison sur quatre peut
+départager deux sorties déjà choisies. Un prix inconnu ne satisfait jamais un
+filtre de budget. La clé Google est lue dans l'environnement et n'est ni stockée
+ni envoyée au catalogue ; sans clé, la carte utilise OpenStreetMap et propose un
+lien Google Maps sur chaque repère.
 
 `GET /next_pair?session_id=...` calcule la prochaine paire sans écrire dans la
 base. Le front-end l'enregistre ensuite via `POST /api/comparisons` avec un
@@ -203,9 +206,11 @@ HTTP 409. Données invalides : 400 ; route inconnue : 404.
 Le modèle choisit la paire ; le logger randomise seulement gauche/droite **une
 fois** et renvoie l'ordre à afficher. Utiliser cet ordre, y compris lors d'une
 retransmission. Les réponses renvoient l'ID choisi, ou null pour un passage.
-L'arrêt après 5 réponses/8 offres et l'acquisition sont gérés par le service
-avec `swiparis.ml.selection.next_pair`.
-Les recommandations doivent être éligibles et absentes des comparaisons offertes.
+Dans l'API de démonstration, l'acquisition s'arrête après 10 réponses/15 offres,
+ou plus tôt si aucune paire informative ne reste. L'évaluation hors ligne garde
+le protocole distinct de 5 réponses/8 offres.
+Les recommandations doivent être éligibles et ne pas contenir une activité
+explicitement rejetée. Une activité choisie peut réapparaître dans le classement.
 
 Exemple PowerShell, avec le serveur lancé dans une autre fenêtre :
 
