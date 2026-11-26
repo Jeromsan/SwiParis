@@ -93,6 +93,19 @@ def habit_vector(visits, encoded) -> np.ndarray:
     return np.concatenate(blocks)
 
 
+def habit_from_phi(rows: np.ndarray, space) -> np.ndarray:
+    """Habitudes (même format que `habit_vector`) à partir des φ d'activités, par exemple la
+    sélection gardée dans l'application : catégories, moments (profil horaire des séances)
+    et zones des activités."""
+    rows = np.atleast_2d(np.asarray(rows, dtype=float))
+    blocks = []
+    for name in ("cat", "time", "zone"):
+        values = rows[:, space.blocks[name]].sum(axis=0)
+        total = values.sum()
+        blocks.append(np.sqrt(values / total) if total > 0 else np.zeros_like(values))
+    return np.concatenate(blocks)
+
+
 def kmeans(x: np.ndarray, k: int, seed: int = 42, n_init: int = 10, iterations: int = 100):
     """k-moyennes (initialisation k-means++), meilleure de `n_init` exécutions."""
     best = None

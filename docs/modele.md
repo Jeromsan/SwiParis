@@ -213,7 +213,10 @@ gardées par réglage).
 
 1. **η de la démo.** Hors ligne, rien ne départage 0,05, 0,2 et 0,5 dans les conditions de
    l'application (voir ci-dessus). Le code garde 0,5 ; changer de valeur se fait avec
-   `SWIPARIS_SESSION_ETA`, sans relancer le test.
+   `SWIPARIS_SESSION_ETA`, sans relancer le test. Pour trancher avec de vrais utilisateurs :
+   lancer le pilote avec `SWIPARIS_SESSION_ETA_AB="0.2,0.5"`, puis
+   `python -m swiparis.ml.pilot_eta` (part des recommandations ouvertes et gardées par réglage,
+   écart avec intervalle de confiance). Ne pas conclure tant que l'intervalle contient 0.
 2. **Restauration et vie nocturne** (question de Martin). Les retirer de
    l'entraînement enlèverait aussi l'artefact du w₀ sur la restauration. Il faut
    alors relancer `pairs`, `prior` puis l'évaluation.

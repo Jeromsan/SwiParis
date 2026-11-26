@@ -80,8 +80,14 @@ L'API charge `models/personas.json` au démarrage (`SWIPARIS_PERSONAS`, `off` po
 désactiver). Chaque séance part du mélange des personas, mis à jour après chaque choix, et
 `/recommendations` renvoie les deux personas les plus proches avec leur pourcentage
 (`persona.top`). Streamlit affiche « Tes choix ressemblent le plus à : … » avec une
-explication. Une personne de l'application n'a pas d'historique Foursquare : la séance part
-des parts de chaque persona (β ne sert pas).
+explication. Une personne de l'application n'a pas d'historique Foursquare. Dès qu'elle a
+gardé au moins deux sorties, « Ma sélection » sert d'historique : ses habitudes (catégories,
+moments, zones des sorties gardées) donnent le point de départ π ∝ part · exp(−β d²), comme
+pour un historique Foursquare (`persona.from_selection` = nombre de sorties utilisées).
+Sinon, la séance part des parts de chaque persona. Deux personnes qui font les mêmes choix
+mais n'ont pas gardé les mêmes sorties n'ont donc pas le même profil (test
+`test_my_selection_is_the_starting_point_of_the_personas`). Cet effet n'a pas pu être mesuré
+hors ligne : aucune donnée ne relie des sorties gardées à des sorties faites ensuite.
 
 Mesure de la configuration réelle (10 choix, top 3, règles de préférence,
 `swiparis.ml.app_eval`) : les personas y semblent bien meilleures que le profil global

@@ -216,6 +216,59 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(actions, [("open",)])
         self.assertEqual(self.client.get("/go/inconnue", follow_redirects=False).status_code, 404)
 
+    def test_eta_comparison_during_the_pilot_and_its_report(self):
+        from swiparis.ml.pilot_eta import report
+        with patch.dict(os.environ, {"SWIPARIS_SESSION_ETA_AB": "0.2,0.5"}):
+            with TestClient(create_app(self.catalog_path, self.logs_path)) as other:
+                version = other.get("/health").json()["model_version"]
+                self.assertIn("+etaAB0.2_0.5", version)
+                etas, sessions = set(), []
+                for _ in range(20):
+                    sid = other.post("/api/sessions", json={
+                        "event_id": str(uuid.uuid4()), "consent": True, "constraints": SLOT, "data_origin": "test",
+                        "catalog_version": self.health["catalog_version"], "model_version": version}).json()["session_id"]
+                    etas.add(other.get("/next_pair", params={"session_id": sid}).json()["session_eta"])
+                    sessions.append(sid)
+                self.assertEqual(etas, {0.2, 0.5})
+                items = other.post("/recommendations", json={"event_id": str(uuid.uuid4()),
+                                                              "session_id": sessions[0]}).json()["items"]
+                for action in ("open", "save"):
+                    other.post("/api/item_action", json={"event_id": str(uuid.uuid4()), "session_id": sessions[0],
+                                                         "impression_id": items[0]["impression_id"], "action": action})
+        result = report(self.logs_path, include_test=True)
+        self.assertEqual(result["sessions"], 20)
+        self.assertEqual(sum(arm["sessions"] for arm in result["arms"].values()), 20)
+        rated = [arm for arm in result["arms"].values() if arm["recommendations_shown"]]
+        self.assertEqual(len(rated), 1)
+        self.assertAlmostEqual(rated[0]["save_rate"], 1 / len(items))
+        self.assertAlmostEqual(rated[0]["open_rate"], 1 / len(items))
+        self.assertEqual(report(self.logs_path)["sessions"], 0)  # séances de test exclues par défaut
+
+    def test_my_selection_is_the_starting_point_of_the_personas(self):
+        catalog = self.client.app.state.catalog
+        rows = catalog.list_items(SLOT, limit=None)["items"]
+        by_category = {}
+        for row in rows:
+            by_category.setdefault(row["categories"][0], []).append(row["item_id"])
+        tastes = {}
+        for category in ("culture", "spectacle"):
+            owner = uuid.uuid4().hex
+            sid = self.session()
+            saved = self.post("/api/saved", owner_id=owner, session_id=sid,
+                              items=[{"item_id": i} for i in by_category[category][:3]])
+            self.assertEqual(saved.status_code, 200, saved.text)
+            fresh = self.session()
+            body = self.post("/recommendations", session_id=fresh, owner_id=owner).json()
+            self.assertEqual(body["persona"]["from_selection"], 3)
+            tastes[category] = [p["share"] for p in sorted(body["persona"]["top"], key=lambda p: p["index"])]
+            tastes[category + "_top"] = body["persona"]["top"][0]["name"]
+        self.assertNotEqual(tastes["culture"], tastes["spectacle"])
+        lone = uuid.uuid4().hex
+        sid = self.session()
+        self.post("/api/saved", owner_id=lone, session_id=sid, items=[{"item_id": by_category["culture"][0]}])
+        body = self.post("/recommendations", session_id=self.session(), owner_id=lone).json()
+        self.assertEqual(body["persona"]["from_selection"], 0)  # une seule sortie : pas assez pour démarrer
+
     def test_invalid_requests(self):
         self.assertEqual(self.client.get("/next_pair", params={"session_id": "inconnue"}).status_code, 400)
         sid = self.session()

@@ -45,6 +45,40 @@ def session_eta() -> float:
     return value
 
 
+def eta_arms() -> tuple[float, ...] | None:
+    """Comparaison de réglages pendant le pilote : SWIPARIS_SESSION_ETA_AB="0.2,0.5".
+
+    Chaque séance reçoit une des valeurs, tirée une fois pour toutes à partir de son
+    identifiant (`eta_for_session`). Sans cette variable, toutes les séances ont le même η.
+    """
+    raw = os.environ.get("SWIPARIS_SESSION_ETA_AB", "").strip()
+    if not raw:
+        return None
+    values = tuple(float(v) for v in raw.split(","))
+    if len(values) < 2 or len(set(values)) != len(values) or any(not 0 < v <= 2 for v in values):
+        raise ValueError("SWIPARIS_SESSION_ETA_AB needs at least two distinct values in (0, 2]")
+    return values
+
+
+def eta_for_session(session_id: str, arms: tuple[float, ...] | None, default: float) -> float:
+    return arms[seed(f"eta:{session_id}") % len(arms)] if arms else default
+
+
+def eta_version(arms: tuple[float, ...] | None, default: float) -> str:
+    """Partie de la version du modèle qui décrit le réglage (gardée avec chaque séance)."""
+    return "etaAB" + "_".join(f"{v:g}" for v in arms) if arms else f"eta{default:g}"
+
+
+def eta_from_version(model_version: str, session_id: str) -> float | None:
+    """η d'une séance du journal, retrouvé à partir de sa version enregistrée."""
+    for token in model_version.split("+"):
+        if token.startswith("etaAB"):
+            return eta_for_session(session_id, tuple(float(v) for v in token[5:].split("_")), 0.0)
+        if token.startswith("eta"):
+            return float(token[3:])
+    return None
+
+
 def seed(text: str) -> int:
     return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:8], "big")
 

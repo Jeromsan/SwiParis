@@ -683,7 +683,7 @@ def advance() -> None:
     sid = st.session_state.session_id
     pending = st.session_state.get("pending_pair")
     if pending is None:
-        suggestion = api(f"/next_pair?session_id={quote(sid)}")
+        suggestion = api("/next_pair?" + urlencode({"session_id": sid, "owner_id": st.session_state.carnet}))
         st.session_state.answers = suggestion.get("answers", 0)
         if suggestion.get("done"):
             st.session_state.ended = True
@@ -751,12 +751,15 @@ def persona_box(persona: dict | None) -> None:
         return
     top = persona["top"]
     names = " · ".join(f"<b>{html.escape(p['name'])}</b> ({p['share']:.0%})" for p in top)
-    st.markdown(f"<div class='persona-box'>Tes choix ressemblent le plus à : {names}</div>",
-                unsafe_allow_html=True)
+    used = persona.get("from_selection", 0)
+    basis = (f"Tes choix et les {used} sorties de ta sélection ressemblent le plus à" if used
+             else "Tes choix ressemblent le plus à")
+    st.markdown(f"<div class='persona-box'>{basis} : {names}</div>", unsafe_allow_html=True)
     with st.expander("Comment c'est calculé ?"):
         st.write("Les personas sont des groupes d'habitudes de sortie observés dans les données Foursquare "
                  "(catégories, moment de la journée, quartiers), pas des profils inventés. Après chaque choix, on "
                  "calcule à quelles personas tes réponses ressemblent ; le pourcentage indique cette ressemblance. "
+                 "Si tu as déjà gardé au moins deux sorties, ta sélection sert de point de départ. "
                  "Le classement tient ensuite compte de tes choix eux-mêmes.")
         for p in top:
             st.markdown(f"**{md(p['name'])}** — {md(p['description'])}")
@@ -766,7 +769,8 @@ def results_screen(saved_ids: set[str]) -> None:
     sid = st.session_state.session_id
     if st.session_state.get("recommendations") is None:
         with st.spinner("On prépare tes recommandations…"):
-            result = api("/recommendations", {"event_id": event_id("recommendations-event"), "session_id": sid})
+            result = api("/recommendations", {"event_id": event_id("recommendations-event"), "session_id": sid,
+                                              "owner_id": st.session_state.carnet})
         st.session_state.pop("recommendations-event", None)
         st.session_state.recommendations = result
     recommendations = st.session_state.recommendations

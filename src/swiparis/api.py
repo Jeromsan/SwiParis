@@ -34,11 +34,13 @@ from .ml import policy
 from .ml.features import FeatureSpace
 from .ml.items import common_items
 from .ml.model import SessionProfile
-from .ml.personas import PersonaModel, PersonaProfile
+from .ml.personas import PersonaModel, PersonaProfile, habit_from_phi
 from .serving import load_model
 
 
 SESSION_POLICY_VERSION = "session-v4"
+# Nombre de sorties gardées à partir duquel « Ma sélection » sert de point de départ aux personas.
+MIN_SELECTION = 2
 
 
 class SessionPayload(BaseModel):
@@ -67,6 +69,7 @@ class InteractionPayload(BaseModel):
 class RecommendationsPayload(BaseModel):
     event_id: str = Field(min_length=1, max_length=200)
     session_id: str
+    owner_id: str | None = None  # carnet « Ma sélection » : sert de point de départ aux personas
 
 
 class SavedItem(BaseModel):
@@ -166,12 +169,13 @@ def _load_personas(feature_space: FeatureSpace) -> PersonaModel | None:
         return None  # autre espace φ (prior de repli) : séance sans personas
 
 
-def _persona_summary(profile) -> dict | None:
+def _persona_summary(profile, from_selection: int = 0) -> dict | None:
     if not isinstance(profile, PersonaProfile):
         return None
     weights = profile.weights_pi
     personas = profile.personas
-    return {"top": [{"index": int(k), "name": personas.names[k], "description": personas.descriptions[k],
+    return {"from_selection": from_selection,
+            "top": [{"index": int(k), "name": personas.names[k], "description": personas.descriptions[k],
                      "share": round(float(weights[k]), 4)} for k in np.argsort(-weights)[:2]]}
 
 
@@ -194,15 +198,16 @@ def create_app(catalog_path: str | Path | None = None,
         logs = LogStore(logs_path or default_logs, catalog)
         feature_space, prior, model_version = _load_scorer(catalog)
         personas = _load_personas(feature_space)
-        eta = policy.session_eta()
+        eta, arms = policy.session_eta(), policy.eta_arms()
         app.state.catalog = catalog
         app.state.logs = logs
         app.state.feature_space = feature_space
         app.state.prior = prior
         app.state.personas = personas
         app.state.eta = eta
+        app.state.eta_arms = arms
         app.state.vectors = _encode_catalog(catalog, feature_space)
-        version = f"{model_version}+{SESSION_POLICY_VERSION}+eta{eta:g}"
+        version = f"{model_version}+{SESSION_POLICY_VERSION}+{policy.eta_version(arms, eta)}"
         app.state.model_version = version + (f"+personas{personas.k}" if personas else "")
 
     @app.middleware("http")
@@ -225,18 +230,31 @@ def create_app(catalog_path: str | Path | None = None,
         except AttributeError as exc:
             raise HTTPException(503, "Catalog is not ready") from exc
 
+    def selection_start(logs: LogStore, owner_id: str | None):
+        """π de départ tiré de « Ma sélection » (au moins MIN_SELECTION sorties), sinon None."""
+        if app.state.personas is None or not owner_id:
+            return None, 0
+        vectors = app.state.vectors
+        rows = [vectors[r["item_id"]] for r in logs.list_saved(owner_id) if r["item_id"] in vectors]
+        if len(rows) < MIN_SELECTION:
+            return None, len(rows)
+        return app.state.personas.start(habit_from_phi(np.vstack(rows), app.state.feature_space)), len(rows)
+
     def session_state(logs: LogStore, session_id: str, catalog: Catalog,
                       feature_space: FeatureSpace, prior: np.ndarray,
-                      constraints: dict[str, Any]):
+                      constraints: dict[str, Any], owner_id: str | None = None):
         rows = catalog.list_items(constraints, limit=None)["items"]
         ids = [row["item_id"] for row in rows]
         vectors = app.state.vectors
         phi = np.vstack([vectors[item_id] for item_id in ids]) if ids else np.zeros((0, feature_space.dim))
         index = {item_id: pos for pos, item_id in enumerate(ids)}
+        eta = policy.eta_for_session(session_id, app.state.eta_arms, app.state.eta)
+        start, from_selection = selection_start(logs, owner_id)
         if app.state.personas is not None:
-            profile = PersonaProfile(app.state.personas, eta=app.state.eta, lam=policy.LAMBDA)
+            profile = PersonaProfile(app.state.personas, start=start, eta=eta, lam=policy.LAMBDA)
+            profile.from_selection = from_selection if start is not None else 0
         else:
-            profile = SessionProfile(prior, eta=app.state.eta, lam=policy.LAMBDA)
+            profile = SessionProfile(prior, eta=eta, lam=policy.LAMBDA)
         with closing(logs.connect()) as db:
             session = db.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,)).fetchone()
             if session is None:
@@ -291,7 +309,7 @@ def create_app(catalog_path: str | Path | None = None,
             raise HTTPException(400, str(exc)) from exc
 
     @app.get("/next_pair")
-    def get_next_pair(session_id: str, request: Request):
+    def get_next_pair(session_id: str, request: Request, owner_id: str | None = None):
         catalog, logs, feature_space, prior = services(request)
         try:
             with closing(logs.connect()) as db:
@@ -300,7 +318,7 @@ def create_app(catalog_path: str | Path | None = None,
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
             (rows, ids, phi, profile, shown, offered, selected, rejected, history) = session_state(
-                logs, session_id, catalog, feature_space, prior, constraints)
+                logs, session_id, catalog, feature_space, prior, constraints, owner_id)
             if profile.n_updates >= policy.MAX_ANSWERS or offered >= policy.MAX_OFFERS:
                 return {"comparison": None, "done": True,
                         "stop_reason": "max_answers" if profile.n_updates >= policy.MAX_ANSWERS else "max_offers",
@@ -311,7 +329,7 @@ def create_app(catalog_path: str | Path | None = None,
                 return {"comparison": None, "done": True, "stop_reason": "no_informative_pair",
                         "answers": profile.n_updates, "offers": offered, "eligible_count": eligible}
             item_a, item_b = sorted(chosen_pair)
-            return {"comparison": {"item_a": item_a, "item_b": item_b}, "done": False,
+            return {"comparison": {"item_a": item_a, "item_b": item_b}, "done": False, "session_eta": profile.eta,
                     "answers": profile.n_updates, "offers": offered, "eligible_count": eligible}
         except Conflict as exc:
             raise HTTPException(409, str(exc)) from exc
@@ -451,10 +469,10 @@ def create_app(catalog_path: str | Path | None = None,
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
             (rows, ids, phi, profile, shown, offered, selected, rejected, history) = session_state(
-                logs, payload.session_id, catalog, feature_space, prior, constraints)
+                logs, payload.session_id, catalog, feature_space, prior, constraints, payload.owner_id)
             ranked = policy.recommend(profile, ids, phi, history, rejected, feature_space,
                                       policy.seed(payload.session_id))
-            persona = _persona_summary(profile)
+            persona = _persona_summary(profile, getattr(profile, "from_selection", 0))
             if not ranked:
                 return {"items": [], "catalog_version": catalog.version, "persona": persona,
                         "model_version": request.app.state.model_version, "impressions": []}
@@ -470,7 +488,7 @@ def create_app(catalog_path: str | Path | None = None,
                 result["selected_by_user"] = item_id in selected and item_id not in rejected
                 result["impression_id"] = impression_map[item_id]["impression_id"]
                 results.append(result)
-            return {"items": results, "catalog_version": catalog.version, "persona": persona,
+            return {"items": results, "catalog_version": catalog.version, "persona": persona, "session_eta": profile.eta,
                     "model_version": request.app.state.model_version, "impressions": shown_result["impressions"]}
         except Conflict as exc:
             raise HTTPException(409, str(exc)) from exc

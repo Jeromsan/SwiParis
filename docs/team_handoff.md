@@ -191,7 +191,13 @@ l'adresse de la page Streamlit (`?carnet=…`), sans donnée personnelle.
 | `GET /go/{impression_id}` | Lien « Voir l'annonce » : journalise `open` puis redirige vers l'annonce, en un clic |
 
 Réglages de la séance sans toucher au code : `SWIPARIS_SESSION_ETA` (défaut 0,5) et
-`SWIPARIS_PERSONAS` (défaut `models/personas.json`, `off` pour les désactiver). La version
+`SWIPARIS_PERSONAS` (défaut `models/personas.json`, `off` pour les désactiver).
+`SWIPARIS_SESSION_ETA_AB="0.2,0.5"` donne à chaque séance une des valeurs (tirée à partir de
+son identifiant, version `…+etaAB0.2_0.5`) ; `python -m swiparis.ml.pilot_eta` compare ensuite
+les réglages sur les séances du pilote. `/next_pair` et `/recommendations` renvoient
+`session_eta`. Paramètre facultatif `owner_id` (carnet « Ma sélection ») sur `/next_pair` et
+`/recommendations` : à partir de deux sorties gardées, la sélection sert de point de départ
+aux personas (`persona.from_selection`). La version
 renvoyée par `/health` les contient (ex. `prior-…+session-v4+eta0.5+personas6`). La
 politique (paires, préférences, classement) est dans `swiparis.ml.policy`. `POST /api/sessions`
 nécessite le consentement et fixe les contraintes de la séance.
