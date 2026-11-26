@@ -61,8 +61,8 @@ historique, −0,002 [−0,008 ; +0,003] sans ; Recall@20 +0,008 [−0,002 ; +0,
   jamais vus (+4,7 points), en validation comme en test.
 - Avec l'historique, elles donnent des listes individuelles (127 listes différentes sur 162
   personnes au lieu de 20 avec w₀ seul) **sans perte de précision**. Même parcours,
-  historiques différents : listes différentes (`scripts/demo_personas.py` : 6 activités
-  communes sur 10 entre deux personas).
+  historiques différents : listes différentes (`scripts/demo_personas.py`, samedi 28/11 de 14 h
+  à 17 h : 4 activités communes sur 10 entre deux personas).
 - Elles **n'améliorent pas** le classement du top 10 (NDCG@10) : les gains vus en
   validation (+0,015) ne se retrouvent pas en test. Ils venaient en partie du choix des
   réglages sur la validation. Le Recall@20 monte un peu, mais l'intervalle touche zéro.
