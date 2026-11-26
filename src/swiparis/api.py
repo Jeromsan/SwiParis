@@ -10,6 +10,7 @@ updates. If no prior is registered, it falls back to category frequency.
 from __future__ import annotations
 
 from contextlib import closing
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,13 @@ from .ml.features import FeatureSpace, Item, source_local_hour, time_profile
 from .ml.model import SessionProfile
 from .ml.selection import next_pair, rank
 from .serving import load_model
+
+
+SESSION_MAX_ANSWERS = 10
+SESSION_MAX_OFFERS = 15
+SESSION_ETA = 0.5
+SESSION_LAMBDA = 0.05
+SESSION_POLICY_VERSION = "session-v2"
 
 
 class SessionPayload(BaseModel):
@@ -149,7 +157,7 @@ def create_app(catalog_path: str | Path | None = None,
         app.state.logs = logs
         app.state.feature_space = feature_space
         app.state.prior = prior
-        app.state.model_version = model_version
+        app.state.model_version = f"{model_version}+{SESSION_POLICY_VERSION}"
 
     @app.middleware("http")
     async def localhost_only(request: Request, call_next):
@@ -179,7 +187,7 @@ def create_app(catalog_path: str | Path | None = None,
         ids = [item.item_id for item in items]
         phi = feature_space.encode_many(items)
         index = {item_id: pos for pos, item_id in enumerate(ids)}
-        profile = SessionProfile(prior)
+        profile = SessionProfile(prior, eta=SESSION_ETA, lam=SESSION_LAMBDA)
         with closing(logs.connect()) as db:
             session = db.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,)).fetchone()
             if session is None:
@@ -191,14 +199,18 @@ def create_app(catalog_path: str | Path | None = None,
                 "WHERE session_id=? ORDER BY offered_at_utc,comparison_id", (session_id,)
             ).fetchall()
         shown = [(row["left_item_id"], row["right_item_id"]) for row in comparisons]
+        selected_items: set[str] = set()
+        rejected_items: set[str] = set()
         for row in comparisons:
             if row["choice"] == "skip":
                 continue
             chosen = row["left_item_id"] if row["choice"] == "left" else row["right_item_id"]
             rejected = row["right_item_id"] if row["choice"] == "left" else row["left_item_id"]
+            selected_items.add(chosen)
+            rejected_items.add(rejected)
             if chosen in index and rejected in index:
                 profile.update(phi[index[chosen]], phi[index[rejected]])
-        return rows, ids, phi, profile, shown, len(comparisons)
+        return rows, ids, phi, profile, shown, len(comparisons), selected_items, rejected_items
 
     @app.get("/health")
     def health(request: Request):
@@ -248,19 +260,25 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            rows, ids, phi, profile, shown, offered = session_state(
+            rows, ids, phi, profile, shown, offered, _selected_items, _rejected_items = session_state(
                 logs, session_id, catalog, feature_space, prior, constraints)
-            if profile.n_updates >= 5 or offered >= 8:
+            if profile.n_updates >= SESSION_MAX_ANSWERS or offered >= SESSION_MAX_OFFERS:
                 return {"comparison": None, "done": True,
-                        "stop_reason": "five_answers" if profile.n_updates >= 5 else "eight_offers",
-                        "answers": profile.n_updates, "offers": offered}
-            chosen_pair = next_pair(profile, phi, ids, shown_pairs=shown)
+                        "stop_reason": "max_answers" if profile.n_updates >= SESSION_MAX_ANSWERS else "max_offers",
+                        "answers": profile.n_updates, "offers": offered, "eligible_count": len(ids)}
+            pair_indices = [i for i, item_id in enumerate(ids) if item_id not in _rejected_items]
+            pair_ids = [ids[i] for i in pair_indices]
+            pair_phi = phi[pair_indices]
+            seed_material = f"{session_id}:{offered}".encode("utf-8")
+            pair_seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
+            chosen_pair = next_pair(profile, pair_phi, pair_ids, shown_pairs=shown,
+                                    pool_size=80, rng=pair_seed)
             if chosen_pair is None:
                 return {"comparison": None, "done": True, "stop_reason": "no_informative_pair",
-                        "answers": profile.n_updates, "offers": offered}
+                        "answers": profile.n_updates, "offers": offered, "eligible_count": len(pair_ids)}
             item_a, item_b = sorted(chosen_pair)
             return {"comparison": {"item_a": item_a, "item_b": item_b}, "done": False,
-                    "answers": profile.n_updates, "offers": offered}
+                    "answers": profile.n_updates, "offers": offered, "eligible_count": len(pair_ids)}
         except Conflict as exc:
             raise HTTPException(409, str(exc)) from exc
         except (ValueError, sqlite3.Error) as exc:
@@ -316,10 +334,9 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            rows, ids, phi, profile, shown, offered = session_state(
+            rows, ids, phi, profile, shown, offered, selected_items, rejected_items = session_state(
                 logs, payload.session_id, catalog, feature_space, prior, constraints)
-            seen = {item for pair in shown for item in pair}
-            keep = [i for i, item_id in enumerate(ids) if item_id not in seen]
+            keep = [i for i, item_id in enumerate(ids) if item_id not in rejected_items]
             if not keep:
                 return {"items": [], "catalog_version": catalog.version,
                         "model_version": request.app.state.model_version, "impressions": []}
@@ -335,6 +352,7 @@ def create_app(catalog_path: str | Path | None = None,
             for item_id, score in ranked:
                 result = dict(item_map[item_id])
                 result["score"] = score
+                result["selected_by_user"] = item_id in selected_items and item_id not in rejected_items
                 result["impression_id"] = impression_map[item_id]["impression_id"]
                 results.append(result)
             return {"items": results, "catalog_version": catalog.version,

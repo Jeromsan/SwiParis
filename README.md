@@ -1,6 +1,6 @@
 # SwiParis
 
-Application interactive de recommandation de sorties et loisirs à Paris. En cinq choix rapides entre paires d'activités, SwiParis apprend le profil de la session et recommande jusqu'à dix sorties adaptées, sous contraintes de créneau, d'arrondissement et de budget.
+Application interactive de recommandation de sorties et loisirs à Paris. En dix choix entre paires d'activités, SwiParis apprend le profil de la session et recommande jusqu'à dix sorties adaptées, sous contraintes de disponibilité, d'arrondissement et de budget. La disponibilité par défaut couvre toute la journée pour permettre un vrai choix parmi les sorties annoncées.
 
 ## Équipe
 
@@ -39,9 +39,9 @@ Dans une deuxième fenêtre, lancer l'interface :
 .\.venv\Scripts\python.exe -m streamlit run src/swiparis/streamlit_app.py
 ```
 
-Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, filtre les annonces Paris Data, journalise les comparaisons dans une base SQLite séparée et affiche les recommandations et la carte. Sans clé Google Maps, les fiches et liens source restent accessibles. Pour afficher la carte, fournir une clé navigateur restreinte via la variable d'environnement `GOOGLE_MAPS_API_KEY`.
+Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, vérifie qu'au moins six sorties correspondent aux filtres pour permettre jusqu'à dix choix sans répéter les paires, journalise les comparaisons dans une base SQLite séparée et affiche les recommandations et la carte. Une séance dure jusqu'à dix choix, avec arrêt anticipé expliqué si le créneau ne contient plus de paire informative. Les sorties choisies peuvent réapparaître parmi les recommandations ; les sorties explicitement rejetées sont écartées. Sans clé Google Maps, les fiches et liens source restent accessibles. Pour afficher la carte, fournir une clé navigateur restreinte via la variable d'environnement `GOOGLE_MAPS_API_KEY`.
 
-L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version dans `/health`. Si aucun prior versionné n'est présent, elle utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
+L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version du prior et de la politique de session dans `/health`. Elle réapplique les dix choix au profil de la séance, garde les sorties choisies comme candidates et écarte celles explicitement rejetées. Si aucun prior versionné n'est présent, l'API utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
 
 ## Vérification du parcours API
 

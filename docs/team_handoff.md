@@ -203,9 +203,11 @@ HTTP 409. Données invalides : 400 ; route inconnue : 404.
 Le modèle choisit la paire ; le logger randomise seulement gauche/droite **une
 fois** et renvoie l'ordre à afficher. Utiliser cet ordre, y compris lors d'une
 retransmission. Les réponses renvoient l'ID choisi, ou null pour un passage.
-L'arrêt après 5 réponses/8 offres et l'acquisition sont gérés par le service
-avec `swiparis.ml.selection.next_pair`.
-Les recommandations doivent être éligibles et absentes des comparaisons offertes.
+Dans l'API de démonstration, l'acquisition s'arrête après 10 réponses/15 offres,
+ou plus tôt si aucune paire informative ne reste. L'évaluation hors ligne garde
+le protocole distinct de 5 réponses/8 offres.
+Les recommandations doivent être éligibles et ne pas contenir une activité
+explicitement rejetée. Une activité choisie peut réapparaître dans le classement.
 
 Exemple PowerShell, avec le serveur lancé dans une autre fenêtre :
 

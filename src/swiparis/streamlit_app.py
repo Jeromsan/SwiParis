@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import uuid
 from zoneinfo import ZoneInfo
@@ -51,6 +52,24 @@ def paris_iso(day: date, start_time: time, minutes: int) -> tuple[str, str]:
             end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
 
 
+def paris_slot_iso(day: date, slot: str, custom_start: time | None = None,
+                   custom_minutes: int = 60) -> tuple[str, str]:
+    """Convertit un choix de disponibilité en fenêtre stricte Europe/Paris."""
+    windows = {
+        "Toute la journée": (time(0, 0), 24 * 60),
+        "Matin (6 h–12 h)": (time(6, 0), 6 * 60),
+        "Après-midi (12 h–18 h)": (time(12, 0), 6 * 60),
+        "Soirée (18 h–minuit)": (time(18, 0), 6 * 60),
+    }
+    if slot == "Horaire précis":
+        if custom_start is None:
+            raise ValueError("Choisis une heure de début")
+        return paris_iso(day, custom_start, custom_minutes)
+    if slot not in windows:
+        raise ValueError("Créneau de disponibilité inconnu")
+    return paris_iso(day, *windows[slot])
+
+
 def start_screen() -> None:
     st.title("SwiParis")
     st.caption("Choisis une sortie parmi deux, puis découvre une sélection adaptée à tes goûts.")
@@ -61,8 +80,16 @@ def start_screen() -> None:
     with st.form("session-setup"):
         st.subheader("Quand et où ?")
         day = st.date_input("Date de sortie", value=date.today())
-        start_time = st.time_input("Début du créneau", value=time(14, 0), step=900)
-        duration = st.selectbox("Durée", (60, 90, 120, 180), format_func=lambda n: f"{n} minutes")
+        slot = st.selectbox("Disponibilité", (
+            "Toute la journée", "Matin (6 h–12 h)", "Après-midi (12 h–18 h)",
+            "Soirée (18 h–minuit)", "Horaire précis",
+        ))
+        if slot == "Horaire précis":
+            start_time = st.time_input("Début du créneau", value=time(14, 0), step=900)
+            duration = st.selectbox("Durée disponible", (60, 90, 120, 180, 240, 360),
+                                    format_func=lambda n: f"{n} minutes")
+        else:
+            start_time, duration = None, 60
         arrondissement = st.selectbox("Arrondissement", [None, *range(1, 21)],
                                       format_func=lambda n: "Tous" if n is None else f"{n}e")
         category = st.selectbox("Catégorie", [None, *sorted(category_labels)],
@@ -78,7 +105,7 @@ def start_screen() -> None:
     if not consent:
         st.error("Le consentement est nécessaire avant de démarrer une séance du pilote.")
         return
-    start_utc, end_utc = paris_iso(day, start_time, int(duration))
+    start_utc, end_utc = paris_slot_iso(day, slot, start_time, int(duration))
     constraints = {"start_utc": start_utc, "end_utc": end_utc}
     if arrondissement is not None:
         constraints["arrondissement"] = arrondissement
@@ -86,6 +113,13 @@ def start_screen() -> None:
         constraints["category"] = category
     if use_budget:
         constraints["budget_eur"] = float(budget)
+    available = api("/api/catalog?" + urlencode({**constraints, "limit": 1}))
+    count = int(available["total"])
+    st.caption(f"{count} sortie(s) correspondent à ces filtres.")
+    if count < 6:
+        st.error("Il faut au moins six sorties disponibles pour permettre jusqu'à dix choix sans répéter "
+                 "les paires. Essaie une autre date, un créneau plus large ou retire un filtre.")
+        return
     created = api("/api/sessions", {
         "event_id": event_id("create-session-event"), "consent": True,
         "constraints": constraints, "catalog_version": health["catalog_version"],
@@ -95,7 +129,12 @@ def start_screen() -> None:
     st.session_state.constraints = constraints
     st.session_state.pair = None
     st.session_state.ended = False
+    st.session_state.stop_reason = None
+    st.session_state.answers = 0
+    st.session_state.available_count = count
     st.session_state.recommendations = None
+    for key in ("pending_pair", "pending_pair_event", "interaction-event", "recommendations-event"):
+        st.session_state.pop(key, None)
     st.rerun()
 
 
@@ -132,11 +171,15 @@ def pair_screen() -> None:
             suggestion = api(f"/next_pair?session_id={sid}")
             if suggestion.get("done"):
                 st.session_state.ended = True
+                st.session_state.stop_reason = suggestion.get("stop_reason")
+                st.session_state.answers = suggestion.get("answers", 0)
+                st.session_state.available_count = suggestion.get("eligible_count", 0)
                 pending = None
             else:
                 pending = suggestion["comparison"]
                 st.session_state.pending_pair = pending
                 st.session_state.pending_pair_event = str(uuid.uuid4())
+                st.session_state.answers = suggestion.get("answers", 0)
         if st.session_state.get("ended"):
             pass
         elif pending is not None:
@@ -147,6 +190,7 @@ def pair_screen() -> None:
             })
             st.session_state.pop("pending_pair", None)
             st.session_state.pop("pending_pair_event", None)
+            result["answers"] = st.session_state.get("answers", 0)
             st.session_state.pair = result
         else:
             st.session_state.ended = True
@@ -157,7 +201,8 @@ def pair_screen() -> None:
             st.info("Recherche d'une comparaison disponible…")
             return
         st.title("Laquelle choisirais-tu ?")
-        st.progress(min(pair.get("answers", 0) / 5, 1.0), text=f"Choix {pair.get('answers', 0)} sur 5")
+        answers = st.session_state.get("answers", pair.get("answers", 0))
+        st.progress(min(answers / 10, 1.0), text=f"Choix {answers} sur 10")
         left, right = st.columns(2, gap="large")
         with left:
             with st.container(border=True):
@@ -173,22 +218,33 @@ def pair_screen() -> None:
             submit_choice(pair, "skip")
     else:
         st.title("Tes sorties recommandées")
+        if st.session_state.get("stop_reason") == "no_informative_pair":
+            answers = st.session_state.get("answers", 0)
+            st.info(f"La comparaison s'est arrêtée après {answers} choix : il ne restait pas "
+                    "de paire assez différente dans ce créneau. Le classement utilise les choix déjà faits.")
+        elif st.session_state.get("stop_reason") == "max_offers":
+            st.info("La séance a atteint sa limite de comparaisons. Le classement utilise les choix enregistrés.")
         recommendations = st.session_state.get("recommendations")
         if recommendations is None:
-            if st.button("Afficher les recommandations", type="primary"):
-                result = api("/recommendations", {
-                    "event_id": event_id("recommendations-event"), "session_id": sid,
-                })
-                st.session_state.pop("recommendations-event", None)
-                st.session_state.recommendations = result
-                st.rerun()
+            result = api("/recommendations", {
+                "event_id": event_id("recommendations-event"), "session_id": sid,
+            })
+            st.session_state.pop("recommendations-event", None)
+            st.session_state.recommendations = result
+            st.rerun()
             return
         items = recommendations.get("items", [])
         if not items:
             st.info("Aucune activité ne correspond à ces contraintes. Essaie un créneau, un budget ou un arrondissement plus large.")
             return
-        for item in items:
+        st.caption(f"Classement personnalisé à partir de {st.session_state.get('answers', 0)} choix.")
+        st.subheader("Meilleur match")
+        for index, item in enumerate(items):
+            if index == 1:
+                st.subheader("Autres sorties recommandées")
             with st.container(border=True):
+                if item.get("selected_by_user"):
+                    st.success("Tu avais choisi cette sortie pendant les comparaisons.")
                 item_card(item)
                 c1, c2 = st.columns(2)
                 with c1:
@@ -265,7 +321,9 @@ def render() -> None:
             start_screen()
         else:
             if st.sidebar.button("Nouvelle séance"):
-                for key in ("session_id", "constraints", "pair", "ended", "recommendations"):
+                for key in ("session_id", "constraints", "pair", "ended", "recommendations",
+                            "pending_pair", "pending_pair_event", "stop_reason", "answers",
+                            "available_count"):
                     st.session_state.pop(key, None)
                 st.rerun()
             pair_screen()

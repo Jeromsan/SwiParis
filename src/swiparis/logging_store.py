@@ -124,9 +124,14 @@ class LogStore:
             if not isinstance(items, list) or not 1 <= len(items) <= 10 or any(not isinstance(i, str) for i in items) or len(set(items)) != len(items):
                 raise ValueError("item_ids must contain 1 to 10 distinct activity IDs")
             self.catalog.require_eligible(items, json.loads(session["constraints_json"]))
-            seen = {r[0] for r in db.execute("SELECT left_item_id FROM comparisons WHERE session_id=? UNION SELECT right_item_id FROM comparisons WHERE session_id=?", (session["session_id"], session["session_id"]))}
-            if seen & set(items):
-                raise ValueError("Recommendations must be unseen in comparisons")
+            rejected = set()
+            for comparison in db.execute(
+                    "SELECT left_item_id,right_item_id,choice FROM comparisons "
+                    "WHERE session_id=? AND choice IN ('left','right')", (session["session_id"],)):
+                rejected.add(comparison["right_item_id"] if comparison["choice"] == "left"
+                             else comparison["left_item_id"])
+            if rejected & set(items):
+                raise ValueError("Recommendations must not repeat explicitly rejected activities")
             shown = []
             at = now()
             for rank, item in enumerate(items, 1):

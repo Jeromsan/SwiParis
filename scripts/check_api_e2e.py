@@ -86,14 +86,17 @@ def main():
             print("API prête; exécution du parcours réel...", flush=True)
             health = call("GET", "/health")
             catalog_info = call("GET", "/api/catalog?limit=1")
+            window = catalog_info["snapshot_window"]
+            constraints = {"start_utc": window["as_of_utc"],
+                           "end_utc": window["window_end_utc"]}
             session = call("POST", "/api/sessions", {
-                "event_id": str(uuid.uuid4()), "consent": True, "constraints": {},
+                "event_id": str(uuid.uuid4()), "consent": True, "constraints": constraints,
                 "catalog_version": catalog_info["catalog_version"],
                 "model_version": health["model_version"], "data_origin": "test",
             })
             session_id = session["session_id"]
             answered = 0
-            for _ in range(8):
+            for _ in range(15):
                 pair_offer = call("GET", f"/next_pair?session_id={session_id}")
                 if pair_offer["done"]:
                     break
@@ -107,6 +110,8 @@ def main():
                     "comparison_id": comparison["comparison_id"], "choice": "left",
                 })
                 answered += 1
+            if answered != 10:
+                raise AssertionError(f"Expected 10 personalized answers, got {answered}")
             recommendations = call("POST", "/recommendations", {
                 "event_id": str(uuid.uuid4()), "session_id": session_id,
             })

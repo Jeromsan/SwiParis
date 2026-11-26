@@ -13,7 +13,8 @@ Classement : score wᵀφ(i), puis re-ranking MMR (Maximal Marginal Relevance) :
 à chaque rang, l'activité qui maximise
     (1 − d) · pertinence(i) − d · max_{j déjà classé} cos(φ(i), φ(j))
 avec la pertinence ramenée dans [0, 1]. d = 0 revient à trier par score.
-Les activités déjà proposées en comparaison sont exclues des recommandations.
+Les identifiants à exclure sont fournis au classement ; le service exclut les
+sorties explicitement rejetées et peut garder les sorties choisies.
 
 Fin de la phase de comparaisons : 5 réponses gauche/droite ou 8 paires proposées
 (passages et paires sans réponse compris), selon le guide de l'équipe.
