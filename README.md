@@ -52,3 +52,7 @@ Avec la base partagée disponible localement :
 ```
 
 Pour la préparation des données et le rapport de répartition des visites, voir [le guide d'équipe](docs/team_handoff.md) et [le résumé des données](docs/data_summary.md).
+
+## Ré-entraînement du modèle
+
+Pour relancer le pipeline MLOps, installez les dépendances avec `.\.venv\Scripts\python.exe -m pip install -r requirements-ml.txt`, puis suivez [le guide du pipeline](docs/ml_pipeline.md) pour générer les paires avec `swiparis.pairs` et réentraîner le modèle. Pour enregistrer le prior utilisé par le serving, exécutez `.\.venv\Scripts\python.exe -m swiparis.serving register --prior models/prior_w0_phi.json --models-dir models` ; voir aussi [le guide du serving](docs/serving.md).
