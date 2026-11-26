@@ -16,7 +16,7 @@ Application interactive de recommandation de sorties et loisirs à Paris. En dix
 
 ## Données
 
-Les bases brutes et préparées ne sont pas versionnées sur Git. Le zip local de la version de référence inclut `data/processed/common.sqlite` pour un lancement direct. Depuis un clone Git, récupérer `swiparis-demo.zip` auprès de l'équipe et copier `common.sqlite` dans `data/processed/common.sqlite`. Le catalogue partagé comprend 816 utilisateurs, 31 694 visites Foursquare, 6 554 lieux et 1 778 annonces Paris Data, avec une taxonomie commune à dix catégories dans `config/common_taxonomy.json`.
+Les données préparées sont versionnées dans le dépôt : `data/processed/common.sqlite` (base commune, 16 Mo), `data/processed/pairs.csv` et `data/processed/splits.csv` (paires et découpage pour l'entraînement et l'évaluation). Un clone suffit donc pour lancer l'appli, les tests et l'entraînement. Les données brutes (`data/raw/`) et le journal du pilote (`data/pilot/`, réponses des participants) ne sont pas versionnés. Le catalogue partagé comprend 816 utilisateurs, 31 694 visites Foursquare, 6 554 lieux et 1 778 annonces Paris Data, avec une taxonomie commune à dix catégories dans `config/common_taxonomy.json`.
 
 Pour régénérer les bases, voir `docs/team_handoff.md`, `docs/foursquare.md` et `docs/paris_data.md`.
 

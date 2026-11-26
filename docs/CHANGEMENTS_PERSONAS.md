@@ -28,7 +28,7 @@ travail : il dit ce qui a changé, pourquoi, où, comment le lancer et ce qu'il 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e ".[systems,ml]"
-# data/processed/common.sqlite à copier depuis swiparis-demo.zip (pas dans Git)
+# data/processed/ (common.sqlite, pairs.csv, splits.csv) est dans le dépôt
 export PYTHONPATH=$PWD/src            # voir « Pièges » : nécessaire sur certains Mac (Python 3.13)
 .venv/bin/python -m unittest discover -s tests                                     # OK (skipped=2 sans torch)
 .venv/bin/python -m uvicorn swiparis.api:app --host 127.0.0.1 --port 8000          # terminal 1
@@ -172,8 +172,8 @@ les lancer : `pip install torch matplotlib pandas`.
 - **`address already in use`** : une API tourne déjà sur le port 8000. `kill $(lsof -ti :8000)`.
 - **« L'API a été relancée avec un autre réglage »** dans l'appli : la version a changé (η,
   personas). Recharger la page ou cliquer « Nouvelle séance ».
-- **Les données ne sont pas dans Git** : `data/processed/common.sqlite` (depuis `swiparis-demo.zip`)
-  et `data/pilot/` restent locales.
+- **Données** : `data/processed/` (base, paires, découpage) est dans Git ; `data/pilot/` (réponses
+  des participants) et `data/raw/` restent locales.
 - **Garder la simulation et l'API alignées** : toute modification de la politique se fait dans
   `swiparis/ml/policy.py`, jamais directement dans `api.py`.
 
