@@ -52,6 +52,14 @@ Ouvrir `http://localhost:8501`. La démo demande le consentement du pilote, vér
 
 L'API charge le prior Bradley–Terry versionné dans `models/` et expose la version du prior et de la politique de session dans `/health`. Elle réapplique les choix au profil de la séance, utilise un signal de préférence récent pour les paires et le classement, garde les sorties choisies comme candidates et écarte celles explicitement rejetées. Si aucun prior versionné n'est présent, l'API utilise le prior de fréquence par catégorie. Voir [le guide du serving](docs/serving.md), [le guide du modèle](docs/modele.md) et [le guide d'équipe](docs/team_handoff.md).
 
+### Sélection, personas et réglages
+
+- **Ma sélection** (menu de gauche) : « Garder » enregistre vraiment la sortie, pendant les choix ou sur les recommandations (on peut en cocher plusieurs). La page liste les sorties gardées par jour ; on peut en retirer (confirmation pour un lot, puis « Annuler ») et les exporter vers un agenda (`.ics`) ou un tableau (`.csv`). La sélection est liée à l'adresse de la page (`?carnet=…`) : en revenant sur la même adresse, on la retrouve.
+- **Voir l'annonce** : un clic, l'ouverture est enregistrée puis l'annonce s'ouvre (`/go`).
+- **Personas** : après les choix, l'appli affiche les deux personas auxquelles les réponses ressemblent (groupes d'habitudes trouvés dans les données Foursquare, voir [docs/personas.md](docs/personas.md)).
+- **Réglages sans toucher au code** : `SWIPARIS_SESSION_ETA` (pas de mise à jour de la séance, défaut 0,5) et `SWIPARIS_PERSONAS` (`off` pour les désactiver), à définir avant de lancer l'API. Pourquoi 0,5 : voir « Réglage de la séance » dans [docs/modele.md](docs/modele.md).
+- **Recette de l'interface** (API lancée) : `.venv/bin/python scripts/check_ui_flow.py` clique comme un utilisateur (48 vérifications).
+
 ## Vérification du parcours API
 
 Avec la base partagée disponible localement :

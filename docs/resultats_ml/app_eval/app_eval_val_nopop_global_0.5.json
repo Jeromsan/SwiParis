@@ -1,0 +1,34 @@
+{
+ "split": "val",
+ "eta": 0.5,
+ "profile": "global",
+ "evaluated_users": 163,
+ "popularity_signal": false,
+ "policy": {
+  "max_answers": 10,
+  "max_offers": 15,
+  "pair_pool": 80,
+  "rank_pool": 300
+ },
+ "mean_answers": 9.392638036809815,
+ "summary": {
+  "ndcg": {
+   "mean": 0.0028416543532690137,
+   "ci95_low": 0.0006751281174787736,
+   "ci95_high": 0.0055065199904367115
+  },
+  "recall": {
+   "mean": 0.0039017501407286473,
+   "ci95_low": 0.0016458711261047552,
+   "ci95_high": 0.006717835165259166
+  },
+  "hit3": {
+   "mean": 0.018404907975460124,
+   "ci95_low": 0.0,
+   "ci95_high": 0.04294478527607362
+  }
+ },
+ "shared_top3_between_two_users": 0.006665151859425888,
+ "distinct_top3_lists": 163,
+ "preferences": true
+}

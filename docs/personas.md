@@ -74,6 +74,26 @@ historique, −0,002 [−0,008 ; +0,003] sans ; Recall@20 +0,008 [−0,002 ; +0,
 - Limites : visites Foursquare de 2012-2013, non-visites qui ne sont pas des rejets, réponses
   simulées. Les choix du pilote restent nécessaires pour valider les personas.
 
+## Dans l'application
+
+L'API charge `models/personas.json` au démarrage (`SWIPARIS_PERSONAS`, `off` pour les
+désactiver). Chaque séance part du mélange des personas, mis à jour après chaque choix, et
+`/recommendations` renvoie les deux personas les plus proches avec leur pourcentage
+(`persona.top`). Streamlit affiche « Tes choix ressemblent le plus à : … » avec une
+explication. Une personne de l'application n'a pas d'historique Foursquare : la séance part
+des parts de chaque persona (β ne sert pas).
+
+Mesure de la configuration réelle (10 choix, top 3, règles de préférence,
+`swiparis.ml.app_eval`) : les personas y semblent bien meilleures que le profil global
+(+0,036 de NDCG@10 en validation), mais cet écart vient du poids de popularité (×16 contre
+×2). À popularité égale, et sans signal de popularité comme pour les annonces Paris Data,
+les deux font jeu égal (`docs/modele.md`, « Réglage de la séance »). Les personas servent
+donc à **expliquer** les recommandations et à démarrer la séance, pas à les rendre plus
+précises : c'est ainsi qu'il faut les présenter.
+
+Le gain sur la prédiction des paires (62,4 % contre 57,7 %) ne dépend pas de ce poids : il
+est mesuré avant le calibrage de la popularité, pour les personas comme pour le w global.
+
 ## Reproduire
 
 ```bash

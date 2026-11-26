@@ -5,6 +5,7 @@ import hashlib
 from importlib.resources import files
 import json
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import uuid
@@ -18,6 +19,16 @@ class Conflict(ValueError):
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+OWNER_ID = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def owner_id(value):
+    """Identifiant du carnet « Ma sélection » : aléatoire, 8 à 64 caractères sûrs."""
+    if not isinstance(value, str) or not OWNER_ID.fullmatch(value):
+        raise ValueError("Invalid owner_id")
+    return value
 
 
 def identifier(value, field):
@@ -34,8 +45,9 @@ class LogStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self.connect()) as db:
             existing = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-            allowed = {"sessions", "comparisons", "recommendations_shown", "recommendation_actions", "request_events"}
-            if existing - allowed or db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1):
+            allowed = {"sessions", "comparisons", "recommendations_shown", "recommendation_actions", "request_events",
+                       "saved_items"}
+            if existing - allowed or db.execute("PRAGMA user_version").fetchone()[0] not in (0, 1, 2):
                 raise ValueError("Refusing to use a source/catalog database or unknown schema as pilot logs")
             db.executescript(files("swiparis").joinpath("logs_schema.sql").read_text(encoding="utf-8"))
 
@@ -152,3 +164,109 @@ class LogStore:
             db.execute("INSERT INTO recommendation_actions VALUES (?,?,?,?)", (data["event_id"], impression, data["action"], now()))
             return dict(impression_id=impression, action=data["action"])
         return self._request("action", data, {"session_id", "impression_id", "action"}, write)
+
+    # --- « Ma sélection » -------------------------------------------------------------
+
+    def save_items(self, data):
+        """Ajoute des activités à la sélection d'un carnet (plusieurs à la fois).
+
+        Une activité déjà gardée n'est pas dupliquée ; une activité retirée puis
+        re-gardée est restaurée. Si l'activité vient d'une recommandation
+        (impression_id), le signal « save » est aussi journalisé une fois pour
+        l'évaluation, comme avant.
+        """
+        def write(db):
+            owner = owner_id(data.get("owner_id"))
+            session = self._session(db, data.get("session_id"))
+            entries = data.get("items")
+            if not isinstance(entries, list) or not 1 <= len(entries) <= 50:
+                raise ValueError("items must contain 1 to 50 activities")
+            parsed = []
+            for entry in entries:
+                if not isinstance(entry, dict) or set(entry) - {"item_id", "impression_id"}:
+                    raise ValueError("Each item needs item_id and an optional impression_id")
+                item = identifier(entry.get("item_id"), "item_id")
+                impression = entry.get("impression_id")
+                if impression is not None:
+                    row = db.execute("SELECT item_id FROM recommendations_shown WHERE impression_id=? AND session_id=?",
+                                     (identifier(impression, "impression_id"), session["session_id"])).fetchone()
+                    if row is None or row["item_id"] != item:
+                        raise ValueError("Impression does not belong to this session and activity")
+                parsed.append((item, impression))
+            if len({item for item, _ in parsed}) != len(parsed):
+                raise ValueError("Duplicate activity in items")
+            self.catalog.require_eligible([item for item, _ in parsed], json.loads(session["constraints_json"]))
+            at, result = now(), []
+            for item, impression in parsed:
+                old = db.execute("SELECT removed_at_utc FROM saved_items WHERE owner_id=? AND item_id=?",
+                                 (owner, item)).fetchone()
+                if old is not None and old["removed_at_utc"] is None:
+                    status = "already_saved"
+                else:
+                    db.execute(
+                        "INSERT INTO saved_items(owner_id,item_id,session_id,impression_id,saved_at_utc,removed_at_utc) "
+                        "VALUES (?,?,?,?,?,NULL) ON CONFLICT(owner_id,item_id) DO UPDATE SET "
+                        "session_id=excluded.session_id,impression_id=excluded.impression_id,"
+                        "saved_at_utc=excluded.saved_at_utc,removed_at_utc=NULL",
+                        (owner, item, session["session_id"], impression, at))
+                    status = "saved" if old is None else "restored"
+                if impression is not None and db.execute(
+                        "SELECT 1 FROM recommendation_actions WHERE impression_id=? AND action='save'",
+                        (impression,)).fetchone() is None:
+                    db.execute("INSERT INTO recommendation_actions VALUES (?,?,?,?)",
+                               (f"{data['event_id']}:{item}", impression, "save", at))
+                result.append(dict(item_id=item, status=status))
+            return dict(items=result, count=self._saved_count(db, owner))
+        return self._request("save", data, {"owner_id", "session_id", "items"}, write)
+
+    def remove_items(self, data):
+        """Retire des activités de la sélection (la ligne reste, datée, pour pouvoir annuler)."""
+        def write(db):
+            owner = owner_id(data.get("owner_id"))
+            items = self._item_list(data.get("item_ids"))
+            at, removed = now(), []
+            for item in items:
+                cursor = db.execute("UPDATE saved_items SET removed_at_utc=? WHERE owner_id=? AND item_id=? "
+                                    "AND removed_at_utc IS NULL", (at, owner, item))
+                if cursor.rowcount:
+                    removed.append(item)
+            return dict(removed=removed, count=self._saved_count(db, owner))
+        return self._request("unsave", data, {"owner_id", "item_ids"}, write)
+
+    def restore_items(self, data):
+        """Annule un retrait : remet les activités dans la sélection, avec leur séance d'origine."""
+        def write(db):
+            owner = owner_id(data.get("owner_id"))
+            items = self._item_list(data.get("item_ids"))
+            restored = []
+            for item in items:
+                cursor = db.execute("UPDATE saved_items SET removed_at_utc=NULL WHERE owner_id=? AND item_id=? "
+                                    "AND removed_at_utc IS NOT NULL", (owner, item))
+                if cursor.rowcount:
+                    restored.append(item)
+            return dict(restored=restored, count=self._saved_count(db, owner))
+        return self._request("restore", data, {"owner_id", "item_ids"}, write)
+
+    def list_saved(self, owner):
+        """Sélection courante d'un carnet, la plus récente d'abord, avec les contraintes de la séance."""
+        owner = owner_id(owner)
+        with closing(self.connect()) as db:
+            rows = db.execute(
+                "SELECT s.item_id,s.session_id,s.impression_id,s.saved_at_utc,x.constraints_json "
+                "FROM saved_items s JOIN sessions x USING(session_id) "
+                "WHERE s.owner_id=? AND s.removed_at_utc IS NULL ORDER BY s.saved_at_utc DESC,s.item_id",
+                (owner,)).fetchall()
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    def _saved_count(db, owner):
+        return db.execute("SELECT count(*) FROM saved_items WHERE owner_id=? AND removed_at_utc IS NULL",
+                          (owner,)).fetchone()[0]
+
+    @staticmethod
+    def _item_list(items):
+        if (not isinstance(items, list) or not 1 <= len(items) <= 200
+                or any(not isinstance(i, str) or not i.strip() or len(i) > 200 for i in items)
+                or len(set(items)) != len(items)):
+            raise ValueError("item_ids must contain 1 to 200 distinct activity IDs")
+        return items

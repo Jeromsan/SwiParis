@@ -42,7 +42,7 @@ from swiparis.ml.items import encode_common, load_histories
 from swiparis.ml.model import SessionProfile, sigmoid
 from swiparis.ml.prior import (POP_SCALES, PRIOR_BLOCKS, accuracy, block_mask, deltas, load_prior, logistic_loss,
                                read_pairs, sha256_file)
-from swiparis.ml.selection import intra_list_diversity, next_pair
+from swiparis.ml.selection import intra_list_diversity
 from swiparis.ml.simulation import PROFILE_ITEMS, profile_similarity, simulate_session
 from swiparis.ml.splits import load_splits
 

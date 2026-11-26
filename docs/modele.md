@@ -56,7 +56,7 @@ Après une réponse gauche ou droite, avec Δ = φ(choisi) − φ(rejeté) :
 Un passage (`skip`) ne modifie pas le profil. L'évaluation hors ligne garde son
 budget de 5 réponses/8 offres afin de préserver le protocole et les résultats
 publiés. La démo interactive utilise 10 réponses/15 offres, avec la mise à jour
-SGD actuelle (η = 0,5, λ = 0,05). Les choix sont rejoués depuis le journal à
+SGD actuelle (η = 0,5 par défaut, réglable avec `SWIPARIS_SESSION_ETA`, λ = 0,05). Les choix sont rejoués depuis le journal à
 chaque requête. Les sorties choisies restent éligibles au classement final et
 les sorties rejetées sont écartées. Cette politique est identifiée par le
 suffixe `session-v3` dans la version exposée par l'API. Un score de préférence
@@ -166,13 +166,54 @@ Fichiers : `docs/resultats_ml/` (rapports JSON) et `docs/profils_exemples.md`.
   sont simulées, et les visites futures Foursquare vont surtout vers les lieux les
   plus fréquentés. Personnaliser fait baisser le NDCG dans ce protocole.
 
+## Réglage de la séance (mesure de la configuration réelle de l'application)
+
+Le tableau ci-dessus mesure 5 réponses et le modèle seul. L'application fait jusqu'à 10
+réponses, affiche 3 recommandations et ajoute les règles de préférence. Cette politique est
+maintenant dans un seul module, `swiparis.ml.policy`, utilisé par l'API **et** par la mesure
+hors ligne `swiparis.ml.app_eval` (même protocole de profil et de réponses simulées).
+Résultats : `docs/resultats_ml/app_eval/`.
+
+Validation, 163 utilisateurs, catalogue Foursquare (avec popularité) :
+
+| Profil | η | NDCG@10 | Hit@3 | Activités communes entre deux top 3 |
+| --- | --- | --- | --- | --- |
+| global | 0,05 | 0,066 | 0,196 | 0,50 |
+| global | 0,2 | 0,057 | 0,202 | 0,25 |
+| global | 0,5 | 0,030 | 0,080 | 0,10 |
+| personas | 0,05 | 0,102 | 0,288 | 1,40 |
+| personas | 0,2 | 0,091 | 0,252 | 0,86 |
+| personas | 0,5 | 0,076 | 0,215 | 0,54 |
+| w₀ seul, sans question | – | 0,098 | 0,270 | – |
+| popularité | – | 0,091 | 0,245 | – |
+
+Test (lu une fois) : personas, η = 0,05 : NDCG@10 0,079 ; écart avec la configuration
+d'origine (global, η = 0,5) +0,052 [+0,033 ; +0,072], Hit@3 +0,099 [+0,031 ; +0,173].
+
+**Mais ces écarts viennent de la popularité, que l'application n'a pas.**
+- À poids de popularité égal, personas et profil global font jeu égal (validation :
+  −0,002 [−0,017 ; +0,014]). Les personas ont un poids de popularité ×16 contre ×2 pour w₀.
+- Les annonces Paris Data n'ont aucune visite : leur bloc popularité vaut 0. En refaisant
+  la mesure sans signal de popularité (`--no-popularity`, comme dans l'application), toutes
+  les configurations tombent autour de NDCG@10 = 0,005 et ne se distinguent plus
+  (η = 0,05 contre 0,5 : +0,002 [−0,002 ; +0,006] ; personas contre global à η = 0,05 :
+  +0,001 [−0,005 ; +0,006]).
+- Conclusion : l'évaluation Foursquare mesure surtout la popularité. Elle ne permet pas de
+  choisir η ni de prouver un gain des personas **pour l'application**. Le « problème de
+  η = 0,5 » signalé avant venait de là.
+
+Décision dans le code : η = 0,5 (choix d'Amine, celui qui personnalise le plus), réglable
+sans toucher au code avec `SWIPARIS_SESSION_ETA` ; personas activées (`SWIPARIS_PERSONAS`,
+`off` pour les retirer), présentées comme une explication des choix, sans gain de précision
+prouvé. Les règles de préférence sont gardées (les retirer ne change rien de mesurable avec
+les personas). Ce qui tranchera : les choix réels du pilote (taux d'ouverture et de sorties
+gardées par réglage).
+
 ## Décisions à prendre en équipe
 
-1. **η de la démo.** 0,05 maximise le NDCG mais ne personnalise presque pas ;
-   0,2 garde le NDCG au niveau de la popularité et divise par deux les listes
-   communes ; 0,5 personnalise vraiment (64 % du top 10 dans les goûts) mais perd
-   en NDCG. Le code garde 0,5 par défaut tant que l'équipe n'a pas tranché.
-   Le test ne doit pas être relancé pour choisir.
+1. **η de la démo.** Hors ligne, rien ne départage 0,05, 0,2 et 0,5 dans les conditions de
+   l'application (voir ci-dessus). Le code garde 0,5 ; changer de valeur se fait avec
+   `SWIPARIS_SESSION_ETA`, sans relancer le test.
 2. **Restauration et vie nocturne** (question de Martin). Les retirer de
    l'entraînement enlèverait aussi l'artefact du w₀ sur la restauration. Il faut
    alors relancer `pairs`, `prior` puis l'évaluation.

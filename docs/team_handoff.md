@@ -111,8 +111,17 @@ $env:GOOGLE_MAPS_API_KEY = 'votre-cle'
 ```
 
 Ouvrir http://127.0.0.1:8000. Le serveur écoute uniquement sur localhost.
-La page affiche les dates du snapshot. Le filtre temporel demande qu'une séance
-**tienne entièrement** dans le créneau choisi. Avec un arrondissement, les
+La page affiche les dates du snapshot. Filtre temporel : une séance courte (3 h ou
+moins : spectacle, atelier) doit **tenir entièrement** dans le créneau choisi ; une séance
+plus longue (horaires d'ouverture d'une exposition, d'un parc) est retenue si l'on peut y
+passer **au moins une heure** pendant le créneau (`swiparis.catalog.SLOT_MATCH`).
+
+Heures des séances : Paris Data écrit l'heure locale de Paris suivie de `+02:00` toute
+l'année. En hiver, les colonnes `start_utc` / `end_utc` de `occurrences` sont donc en avance
+d'une heure. Le catalogue compare les créneaux avec `swiparis.catalog.occurrence_utc`, qui
+relit l'heure écrite dans le fuseau Europe/Paris, et renvoie cette heure corrigée dans
+`next_occurrence`. Avant, 3 à 4 activités par créneau de 3 h commençaient après la fin du
+créneau. Avec un arrondissement, les
 annonces multi-lieux sans association séance/adresse sont exclues. Un budget
 exclut les prix numériques inconnus et les gratuités conditionnelles.
 
@@ -166,7 +175,25 @@ base. Le front-end l'enregistre ensuite via `POST /api/comparisons` avec un
 `event_id` stable, ce qui persiste les deux items et leur ordre gauche/droite.
 `POST /log_interaction` enregistre `left`, `right` ou `skip`. `POST
 /recommendations` classe les activités non montrées et enregistre les impressions.
-`POST /api/item_action` enregistre `open` et `save`. `POST /api/sessions`
+`POST /api/item_action` enregistre `open` et `save`.
+
+« Ma sélection » (sorties gardées) est un état enregistré, pas seulement un signal : table
+`saved_items` du journal pilote (schéma v2, ajoutée automatiquement à une base v1), une
+ligne par carnet et activité. Le carnet (`owner_id`) est un identifiant aléatoire porté par
+l'adresse de la page Streamlit (`?carnet=…`), sans donnée personnelle.
+
+| Route | Rôle |
+| --- | --- |
+| `POST /api/saved` | Garder 1 à 50 activités d'une séance (`owner_id`, `session_id`, `items: [{item_id, impression_id?}]`), sans doublon ; journalise aussi `save` une fois par recommandation, pour l'évaluation |
+| `POST /api/saved/remove` | Retirer (`owner_id`, `item_ids`) ; la ligne garde la date de retrait |
+| `POST /api/saved/restore` | Annuler un retrait (`owner_id`, `item_ids`) |
+| `GET /api/saved?owner_id=…` | Sélection courante, fiche complète de chaque activité et créneau d'origine |
+| `GET /go/{impression_id}` | Lien « Voir l'annonce » : journalise `open` puis redirige vers l'annonce, en un clic |
+
+Réglages de la séance sans toucher au code : `SWIPARIS_SESSION_ETA` (défaut 0,5) et
+`SWIPARIS_PERSONAS` (défaut `models/personas.json`, `off` pour les désactiver). La version
+renvoyée par `/health` les contient (ex. `prior-…+session-v4+eta0.5+personas6`). La
+politique (paires, préférences, classement) est dans `swiparis.ml.policy`. `POST /api/sessions`
 nécessite le consentement et fixe les contraintes de la séance.
 
 Le scorer initial utilise la fréquence lissée des catégories Foursquare comme

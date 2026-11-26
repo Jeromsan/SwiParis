@@ -2,7 +2,7 @@
 
     python scripts/demo_personas.py
 """
-import json, numpy as np, sys
+import numpy as np, sys
 sys.path.insert(0, "src")  # lancer depuis la racine du dépôt
 from swiparis.catalog import Catalog
 from swiparis.ml.items import encode_common
