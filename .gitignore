@@ -8,7 +8,7 @@ __pycache__/
 data/raw/**
 !data/raw/foursquare/
 !data/raw/foursquare/.gitkeep
-data/processed/
+data/processed/*
 data/pilot/
 outputs/
 .env
@@ -18,3 +18,9 @@ outputs/
 *.sqlite*
 build/
 dist/
+# Données préparées versionnées pour que le dépôt se lance seul (correcteur, équipe) :
+!data/processed/common.sqlite
+!data/processed/pairs.csv
+!data/processed/splits.csv
+.DS_Store
+SwiParis-*.zip

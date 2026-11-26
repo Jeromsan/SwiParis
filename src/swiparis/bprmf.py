@@ -18,7 +18,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from .baselines import pairwise_accuracy, popularity_scores, random_scores
+from .baselines import popularity_scores, random_scores
 from .pairs import load_foursquare, read_table
 
 

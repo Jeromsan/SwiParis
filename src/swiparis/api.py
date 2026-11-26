@@ -6,37 +6,41 @@ Run after preparing ``data/processed/common.sqlite`` with:
 The service uses the shared SQLite catalog and the separate pilot database.
 It loads the versioned Bradley-Terry prior from ``models/`` and applies session
 updates. If no prior is registered, it falls back to category frequency.
+The session policy (pairs, preferences, ranking) lives in ``swiparis.ml.policy`` so
+that the offline simulation measures exactly what the API does. When
+``models/personas.json`` is present (``SWIPARIS_PERSONAS``), each session starts from
+a mixture of personas updated after every choice.
 """
 from __future__ import annotations
 
-from contextlib import closing
-import hashlib
+from contextlib import asynccontextmanager, closing
 import json
 import os
 from pathlib import Path
 import sqlite3
 import time
 from typing import Any
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 import numpy as np
 
 from .catalog import Catalog
 from .logging_store import Conflict, LogStore
-from .ml.features import FeatureSpace, Item, source_local_hour, time_profile
+from .ml import policy
+from .ml.features import FeatureSpace
+from .ml.items import common_items
 from .ml.model import SessionProfile
-from .ml.selection import next_pair, rank
+from .ml.personas import PersonaModel, PersonaProfile, habit_from_phi
 from .serving import load_model
 
 
-SESSION_MAX_ANSWERS = 10
-SESSION_MAX_OFFERS = 15
-SESSION_ETA = 0.5
-SESSION_LAMBDA = 0.05
-SESSION_POLICY_VERSION = "session-v3"
+SESSION_POLICY_VERSION = "session-v4"
+# Nombre de sorties gardées à partir duquel « Ma sélection » sert de point de départ aux personas.
+MIN_SELECTION = 2
 
 
 class SessionPayload(BaseModel):
@@ -65,6 +69,25 @@ class InteractionPayload(BaseModel):
 class RecommendationsPayload(BaseModel):
     event_id: str = Field(min_length=1, max_length=200)
     session_id: str
+    owner_id: str | None = None  # carnet « Ma sélection » : sert de point de départ aux personas
+
+
+class SavedItem(BaseModel):
+    item_id: str = Field(min_length=1, max_length=200)
+    impression_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class SavePayload(BaseModel):
+    event_id: str = Field(min_length=1, max_length=200)
+    owner_id: str
+    session_id: str
+    items: list[SavedItem] = Field(min_length=1, max_length=50)
+
+
+class SavedIdsPayload(BaseModel):
+    event_id: str = Field(min_length=1, max_length=200)
+    owner_id: str
+    item_ids: list[str] = Field(min_length=1, max_length=200)
 
 
 class ItemActionPayload(BaseModel):
@@ -123,41 +146,69 @@ def _load_scorer(catalog: Catalog) -> tuple[FeatureSpace, np.ndarray, str]:
     return model.space, model.w0, model.version
 
 
-def _item_vector(row: dict[str, Any]) -> Item:
-    location = row["locations"][0] if row.get("locations") else {}
-    occurrence = row.get("next_occurrence") or {}
-    hours = []
-    if occurrence.get("source_start"):
-        hours.append(source_local_hour(occurrence["source_start"]))
-    return Item(
-        item_id=row["item_id"],
-        categories=tuple(row.get("categories", [])),
-        price_type=row.get("price_type", "unknown"),
-        latitude=location.get("latitude"),
-        longitude=location.get("longitude"),
-        time_profile=time_profile(hours),
-    )
+def _encode_catalog(catalog: Catalog, feature_space: FeatureSpace) -> dict[str, np.ndarray]:
+    """φ de chaque annonce Paris Data, calculé une fois au démarrage.
+
+    Même encodage que l'entraînement et l'évaluation (`swiparis.ml.items`) : le moment
+    de la journée vient de toutes les séances de l'annonce, pas seulement de celle qui
+    tombe dans le créneau demandé.
+    """
+    items = common_items(catalog.path, users=None, sources=["paris_data"])
+    phi = feature_space.encode_many(items)
+    return {item.item_id: phi[row] for row, item in enumerate(items)}
+
+
+def _load_personas(feature_space: FeatureSpace) -> PersonaModel | None:
+    """Personas de ``SWIPARIS_PERSONAS`` (défaut models/personas.json) ; ``off`` les désactive."""
+    path = os.environ.get("SWIPARIS_PERSONAS", "models/personas.json")
+    if path.lower() == "off" or not Path(path).exists():
+        return None
+    try:
+        return PersonaModel.load(path, feature_space)
+    except ValueError:
+        return None  # autre espace φ (prior de repli) : séance sans personas
+
+
+def _persona_summary(profile, from_selection: int = 0) -> dict | None:
+    if not isinstance(profile, PersonaProfile):
+        return None
+    weights = profile.weights_pi
+    personas = profile.personas
+    return {"from_selection": from_selection,
+            "top": [{"index": int(k), "name": personas.names[k], "description": personas.descriptions[k],
+                     "share": round(float(weights[k]), 4)} for k in np.argsort(-weights)[:2]]}
 
 
 def create_app(catalog_path: str | Path | None = None,
                logs_path: str | Path | None = None) -> FastAPI:
-    app = FastAPI(title="SwiParis API", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        load_services()
+        yield
+
+    app = FastAPI(title="SwiParis API", version="0.1.0", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request: Request, _exc: RequestValidationError):
         return JSONResponse(status_code=400, content={"error": "Invalid request"})
 
-    @app.on_event("startup")
     def load_services() -> None:
         default_catalog, default_logs = _paths()
         catalog = Catalog(catalog_path or default_catalog)
         logs = LogStore(logs_path or default_logs, catalog)
         feature_space, prior, model_version = _load_scorer(catalog)
+        personas = _load_personas(feature_space)
+        eta, arms = policy.session_eta(), policy.eta_arms()
         app.state.catalog = catalog
         app.state.logs = logs
         app.state.feature_space = feature_space
         app.state.prior = prior
-        app.state.model_version = f"{model_version}+{SESSION_POLICY_VERSION}"
+        app.state.personas = personas
+        app.state.eta = eta
+        app.state.eta_arms = arms
+        app.state.vectors = _encode_catalog(catalog, feature_space)
+        version = f"{model_version}+{SESSION_POLICY_VERSION}+{policy.eta_version(arms, eta)}"
+        app.state.model_version = version + (f"+personas{personas.k}" if personas else "")
 
     @app.middleware("http")
     async def localhost_only(request: Request, call_next):
@@ -179,15 +230,31 @@ def create_app(catalog_path: str | Path | None = None,
         except AttributeError as exc:
             raise HTTPException(503, "Catalog is not ready") from exc
 
+    def selection_start(logs: LogStore, owner_id: str | None):
+        """π de départ tiré de « Ma sélection » (au moins MIN_SELECTION sorties), sinon None."""
+        if app.state.personas is None or not owner_id:
+            return None, 0
+        vectors = app.state.vectors
+        rows = [vectors[r["item_id"]] for r in logs.list_saved(owner_id) if r["item_id"] in vectors]
+        if len(rows) < MIN_SELECTION:
+            return None, len(rows)
+        return app.state.personas.start(habit_from_phi(np.vstack(rows), app.state.feature_space)), len(rows)
+
     def session_state(logs: LogStore, session_id: str, catalog: Catalog,
                       feature_space: FeatureSpace, prior: np.ndarray,
-                      constraints: dict[str, Any]):
+                      constraints: dict[str, Any], owner_id: str | None = None):
         rows = catalog.list_items(constraints, limit=None)["items"]
-        items = [_item_vector(row) for row in rows]
-        ids = [item.item_id for item in items]
-        phi = feature_space.encode_many(items)
+        ids = [row["item_id"] for row in rows]
+        vectors = app.state.vectors
+        phi = np.vstack([vectors[item_id] for item_id in ids]) if ids else np.zeros((0, feature_space.dim))
         index = {item_id: pos for pos, item_id in enumerate(ids)}
-        profile = SessionProfile(prior, eta=SESSION_ETA, lam=SESSION_LAMBDA)
+        eta = policy.eta_for_session(session_id, app.state.eta_arms, app.state.eta)
+        start, from_selection = selection_start(logs, owner_id)
+        if app.state.personas is not None:
+            profile = PersonaProfile(app.state.personas, start=start, eta=eta, lam=policy.LAMBDA)
+            profile.from_selection = from_selection if start is not None else 0
+        else:
+            profile = SessionProfile(prior, eta=eta, lam=policy.LAMBDA)
         with closing(logs.connect()) as db:
             session = db.execute("SELECT * FROM sessions WHERE session_id=?", (session_id,)).fetchone()
             if session is None:
@@ -198,55 +265,9 @@ def create_app(catalog_path: str | Path | None = None,
                 "SELECT left_item_id,right_item_id,choice FROM comparisons "
                 "WHERE session_id=? ORDER BY offered_at_utc,comparison_id", (session_id,)
             ).fetchall()
-        shown = [(row["left_item_id"], row["right_item_id"]) for row in comparisons]
-        selected_items: set[str] = set()
-        rejected_items: set[str] = set()
-        preference_history: list[tuple[str, str]] = []
-        for row in comparisons:
-            if row["choice"] == "skip":
-                continue
-            chosen = row["left_item_id"] if row["choice"] == "left" else row["right_item_id"]
-            rejected = row["right_item_id"] if row["choice"] == "left" else row["left_item_id"]
-            selected_items.add(chosen)
-            rejected_items.add(rejected)
-            preference_history.append((chosen, rejected))
-            if chosen in index and rejected in index:
-                profile.update(phi[index[chosen]], phi[index[rejected]])
-        return (rows, ids, phi, profile, shown, len(comparisons), selected_items,
-                rejected_items, preference_history)
-
-    def preference_scores(ids: list[str], phi: np.ndarray, history: list[tuple[str, str]],
-                          feature_space: FeatureSpace, history_ids: list[str],
-                          history_phi: np.ndarray) -> np.ndarray:
-        """Blend decayed like/dislike evidence with similarity to liked outings."""
-        if not history or not len(ids):
-            return np.zeros(len(ids), dtype=float)
-        index = {item_id: pos for pos, item_id in enumerate(history_ids)}
-        cat = feature_space.blocks["cat"]
-        cat_evidence = np.zeros(cat.stop - cat.start, dtype=float)
-        total_weight = 0.0
-        liked_rows, liked_weights = [], []
-        for age, (chosen, rejected) in enumerate(reversed(history)):
-            weight = 0.78 ** age
-            total_weight += weight
-            if chosen in index:
-                liked_rows.append(history_phi[index[chosen]])
-                liked_weights.append(weight)
-                cat_evidence += weight * history_phi[index[chosen], cat]
-            if rejected in index:
-                cat_evidence -= 0.8 * weight * history_phi[index[rejected], cat]
-        category_fit = phi[:, cat] @ cat_evidence / max(total_weight, 1e-12)
-        if not liked_rows:
-            return category_fit
-        candidate_norms = np.linalg.norm(phi, axis=1, keepdims=True)
-        candidate_unit = np.divide(phi, candidate_norms, out=np.zeros_like(phi), where=candidate_norms > 0)
-        liked = np.asarray(liked_rows, dtype=float)
-        liked_norms = np.linalg.norm(liked, axis=1, keepdims=True)
-        liked_unit = np.divide(liked, liked_norms, out=np.zeros_like(liked), where=liked_norms > 0)
-        similarities = np.clip(candidate_unit @ liked_unit.T, 0, 1)
-        recency = np.asarray(liked_weights, dtype=float)
-        similarity_fit = np.max(similarities * recency[None, :], axis=1)
-        return category_fit + similarity_fit
+        shown, selected, rejected, history = policy.replay(
+            profile, [(r["left_item_id"], r["right_item_id"], r["choice"]) for r in comparisons], index, phi)
+        return rows, ids, phi, profile, shown, len(comparisons), selected, rejected, history
 
     @app.get("/health")
     def health(request: Request):
@@ -288,7 +309,7 @@ def create_app(catalog_path: str | Path | None = None,
             raise HTTPException(400, str(exc)) from exc
 
     @app.get("/next_pair")
-    def get_next_pair(session_id: str, request: Request):
+    def get_next_pair(session_id: str, request: Request, owner_id: str | None = None):
         catalog, logs, feature_space, prior = services(request)
         try:
             with closing(logs.connect()) as db:
@@ -296,42 +317,20 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            (rows, ids, phi, profile, shown, offered, selected_items, rejected_items,
-             history) = session_state(
-                logs, session_id, catalog, feature_space, prior, constraints)
-            if profile.n_updates >= SESSION_MAX_ANSWERS or offered >= SESSION_MAX_OFFERS:
+            (rows, ids, phi, profile, shown, offered, selected, rejected, history) = session_state(
+                logs, session_id, catalog, feature_space, prior, constraints, owner_id)
+            if profile.n_updates >= policy.MAX_ANSWERS or offered >= policy.MAX_OFFERS:
                 return {"comparison": None, "done": True,
-                        "stop_reason": "max_answers" if profile.n_updates >= SESSION_MAX_ANSWERS else "max_offers",
+                        "stop_reason": "max_answers" if profile.n_updates >= policy.MAX_ANSWERS else "max_offers",
                         "answers": profile.n_updates, "offers": offered, "eligible_count": len(ids)}
-            pair_indices = [i for i, item_id in enumerate(ids) if item_id not in rejected_items]
-            pair_ids = [ids[i] for i in pair_indices]
-            pair_phi = phi[pair_indices]
-            pair_preferences = preference_scores(pair_ids, pair_phi, history, feature_space, ids, phi)
-            liked_ids = [chosen for chosen, _ in history if chosen in pair_ids]
-            seed_material = f"{session_id}:{offered}".encode("utf-8")
-            pair_seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:8], "big")
-            chosen_pair = None
-            # Every fourth offer can compare two earlier winners, giving the
-            # model direct evidence about their relative order.
-            liked_ids = list(dict.fromkeys(liked_ids))
-            if offered >= 3 and offered % 4 == 3 and len(liked_ids) >= 2:
-                liked_set = set(liked_ids)
-                favorite_indices = [i for i, item_id in enumerate(pair_ids) if item_id in liked_set]
-                chosen_pair = next_pair(
-                    profile, pair_phi[favorite_indices], [pair_ids[i] for i in favorite_indices],
-                    shown_pairs=shown, pool_size=max(2, len(favorite_indices)), rng=pair_seed,
-                )
-            if chosen_pair is None:
-                chosen_pair = next_pair(
-                    profile, pair_phi, pair_ids, shown_pairs=shown, pool_size=80,
-                    rng=pair_seed, preference_scores=pair_preferences, anchor_ids=liked_ids,
-                )
+            chosen_pair, eligible = policy.choose_pair(profile, ids, phi, shown, offered, history, rejected,
+                                                       feature_space, policy.seed(f"{session_id}:{offered}"))
             if chosen_pair is None:
                 return {"comparison": None, "done": True, "stop_reason": "no_informative_pair",
-                        "answers": profile.n_updates, "offers": offered, "eligible_count": len(pair_ids)}
+                        "answers": profile.n_updates, "offers": offered, "eligible_count": eligible}
             item_a, item_b = sorted(chosen_pair)
-            return {"comparison": {"item_a": item_a, "item_b": item_b}, "done": False,
-                    "answers": profile.n_updates, "offers": offered, "eligible_count": len(pair_ids)}
+            return {"comparison": {"item_a": item_a, "item_b": item_b}, "done": False, "session_eta": profile.eta,
+                    "answers": profile.n_updates, "offers": offered, "eligible_count": eligible}
         except Conflict as exc:
             raise HTTPException(409, str(exc)) from exc
         except (ValueError, sqlite3.Error) as exc:
@@ -368,6 +367,88 @@ def create_app(catalog_path: str | Path | None = None,
         except (ValueError, sqlite3.Error) as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    def _logged(call, payload):
+        try:
+            return call(payload)
+        except Conflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (ValueError, sqlite3.Error) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/go/{impression_id}")
+    def open_recommendation(impression_id: str, request: Request):
+        """Lien « Voir l'annonce » : journalise l'ouverture puis redirige vers l'annonce source.
+
+        Un seul clic pour l'utilisateur, au lieu de « journaliser » puis « ouvrir ».
+        La redirection ne va que vers l'URL source enregistrée de l'activité recommandée.
+        """
+        catalog, logs, _, _ = services(request)
+        with closing(logs.connect()) as db:
+            row = db.execute("SELECT session_id,item_id FROM recommendations_shown WHERE impression_id=?",
+                             (impression_id,)).fetchone()
+        found = catalog.list_items({}, limit=None, item_ids=[row["item_id"]])["items"] if row else []
+        url = found[0].get("source_url") if found else None
+        if not url or not url.startswith(("https://", "http://")):
+            return HTMLResponse("<p>Ce lien n'est plus disponible. Retourne sur SwiParis.</p>", status_code=404)
+        try:
+            logs.item_action({"event_id": str(uuid.uuid4()), "session_id": row["session_id"],
+                              "impression_id": impression_id, "action": "open"})
+        except (ValueError, sqlite3.Error):
+            pass  # l'annonce doit s'ouvrir même si le journal refuse (catalogue changé, etc.)
+        return RedirectResponse(url, status_code=303)
+
+    @app.post("/api/saved")
+    def save_items(payload: SavePayload, request: Request):
+        _, logs, _, _ = services(request)
+        return _logged(logs.save_items, payload.model_dump(exclude_none=False) | {
+            "items": [item.model_dump(exclude_none=True) for item in payload.items]})
+
+    @app.post("/api/saved/remove")
+    def remove_saved(payload: SavedIdsPayload, request: Request):
+        _, logs, _, _ = services(request)
+        return _logged(logs.remove_items, payload.model_dump())
+
+    @app.post("/api/saved/restore")
+    def restore_saved(payload: SavedIdsPayload, request: Request):
+        _, logs, _, _ = services(request)
+        return _logged(logs.restore_items, payload.model_dump())
+
+    @app.get("/api/saved")
+    def list_saved(owner_id: str, request: Request):
+        """Sélection d'un carnet, avec la fiche complète de chaque activité.
+
+        La séance affichée est celle du créneau où l'activité a été gardée. Une
+        activité sortie du catalogue reste listée avec ``available: false``.
+        """
+        catalog, logs, _, _ = services(request)
+        try:
+            saved = logs.list_saved(owner_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        by_constraints: dict[str, list[str]] = {}
+        for row in saved:
+            by_constraints.setdefault(row["constraints_json"], []).append(row["item_id"])
+        details: dict[str, dict] = {}
+        for constraints_json, item_ids in by_constraints.items():
+            try:
+                rows = catalog.list_items(json.loads(constraints_json), limit=None, item_ids=item_ids)["items"]
+            except ValueError:
+                rows = []
+            details.update({row["item_id"]: row for row in rows})
+        missing = [row["item_id"] for row in saved if row["item_id"] not in details]
+        if missing:
+            details.update({row["item_id"]: row for row in
+                            catalog.list_items({}, limit=None, item_ids=missing)["items"]})
+        items = []
+        for row in saved:
+            constraints = json.loads(row["constraints_json"])
+            item = dict(details.get(row["item_id"], {"item_id": row["item_id"]}))
+            item.update(available=row["item_id"] in details, saved_at_utc=row["saved_at_utc"],
+                        session_id=row["session_id"], impression_id=row["impression_id"],
+                        slot={k: constraints[k] for k in ("start_utc", "end_utc") if k in constraints})
+            items.append(item)
+        return {"items": items, "count": len(items), "categories": catalog.categories}
+
     @app.post("/log_interaction")
     def log_interaction(payload: InteractionPayload, request: Request):
         _, logs, _, _ = services(request)
@@ -387,19 +468,14 @@ def create_app(catalog_path: str | Path | None = None,
                 if session is None:
                     raise ValueError("Unknown session")
                 constraints = json.loads(session["constraints_json"])
-            (rows, ids, phi, profile, shown, offered, selected_items, rejected_items,
-             history) = session_state(
-                logs, payload.session_id, catalog, feature_space, prior, constraints)
-            keep = [i for i, item_id in enumerate(ids) if item_id not in rejected_items]
-            if not keep:
-                return {"items": [], "catalog_version": catalog.version,
+            (rows, ids, phi, profile, shown, offered, selected, rejected, history) = session_state(
+                logs, payload.session_id, catalog, feature_space, prior, constraints, payload.owner_id)
+            ranked = policy.recommend(profile, ids, phi, history, rejected, feature_space,
+                                      policy.seed(payload.session_id))
+            persona = _persona_summary(profile, getattr(profile, "from_selection", 0))
+            if not ranked:
+                return {"items": [], "catalog_version": catalog.version, "persona": persona,
                         "model_version": request.app.state.model_version, "impressions": []}
-            eligible_ids = [ids[i] for i in keep]
-            eligible_phi = phi[keep]
-            eligible_preferences = preference_scores(
-                eligible_ids, eligible_phi, history, feature_space, ids, phi)
-            ranked = rank(profile, eligible_phi, eligible_ids, k=3, diversity=0.3,
-                          preference_scores=eligible_preferences, preference_weight=1.0)
             item_map = {row["item_id"]: row for row in rows}
             item_ids = [item_id for item_id, _ in ranked]
             shown_result = logs.show_recommendations({"event_id": payload.event_id,
@@ -409,10 +485,10 @@ def create_app(catalog_path: str | Path | None = None,
             for item_id, score in ranked:
                 result = dict(item_map[item_id])
                 result["score"] = score
-                result["selected_by_user"] = item_id in selected_items and item_id not in rejected_items
+                result["selected_by_user"] = item_id in selected and item_id not in rejected
                 result["impression_id"] = impression_map[item_id]["impression_id"]
                 results.append(result)
-            return {"items": results, "catalog_version": catalog.version,
+            return {"items": results, "catalog_version": catalog.version, "persona": persona, "session_eta": profile.eta,
                     "model_version": request.app.state.model_version, "impressions": shown_result["impressions"]}
         except Conflict as exc:
             raise HTTPException(409, str(exc)) from exc

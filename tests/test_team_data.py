@@ -1,7 +1,6 @@
 from contextlib import closing, redirect_stdout
 import io
 import json
-import os
 from pathlib import Path
 import sqlite3
 import tempfile
